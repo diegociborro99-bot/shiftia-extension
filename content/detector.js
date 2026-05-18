@@ -130,13 +130,50 @@
   }
 
   function detectWorkerName() {
-    // El title de la página: "ACTAIS - Mi calendario" no trae nombre.
-    // Buscar header del modal de empleado u otros sitios típicos.
-    const header = document.querySelector('[id*="lblWorkerName"], [id*="WorkerName"], .worker-name-header, .employee-name');
+    // 1. Cabecera "Bienvenido, APELLIDOS, NOMBRE (SANITARIO - ...)" del shell
+    //    de Actais — funciona en "Mi calendario".
+    const shellHeader = document.querySelector('#welcome-msg, #lblWelcome, .welcome-message');
+    if (shellHeader) {
+      const m = shellHeader.textContent.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+)/);
+      if (m) return m[1].trim();
+    }
+
+    // 2. Cabecera del modal "Mi calendario" o "Calendario del empleado"
+    //    (lo más esperado en el visor de gestión cuando la super selecciona un worker).
+    const calendarHeader = document.querySelector(
+      '#workerCalendarTotalContainer .modal-title, ' +
+      '#workerCalendarTotalContainer h3, ' +
+      '#workerCalendarTotalContainer h4, ' +
+      '#workerCalendarTotalContainer [class*="header"], ' +
+      '.modal-header .modal-title'
+    );
+    if (calendarHeader) {
+      const text = calendarHeader.textContent.trim();
+      if (text && !/calendario|empleado|trabajador/i.test(text) && text.length < 80) return text;
+    }
+
+    // 3. Item seleccionado en el árbol/lista de empleados (visor de gestión).
+    const selectedEmployee = document.querySelector(
+      '.dx-treeview-node.dx-state-selected .dx-treeview-item, ' +
+      '.tree-employee.selected, ' +
+      '[class*="employee"][class*="selected"], ' +
+      'li.selected[id*="emp"], ' +
+      'li.ui-state-active'
+    );
+    if (selectedEmployee) {
+      const t = selectedEmployee.textContent.trim();
+      if (t && t.length < 80) return t;
+    }
+
+    // 4. Selectores genéricos legacy.
+    const header = document.querySelector(
+      '[id*="lblWorkerName"], [id*="WorkerName"], .worker-name-header, .employee-name'
+    );
     if (header) return header.textContent.trim();
-    // Fallback: si el title tiene patrón "APELLIDOS, NOMBRE"
-    const tm = document.title.match(/([A-ZÁÉÍÓÚÑ ]+),\s*([A-ZÁÉÍÓÚÑ ]+)/);
-    return tm ? `${tm[1]}, ${tm[2]}` : null;
+
+    // 5. Title.
+    const tm = document.title.match(/([A-ZÁÉÍÓÚÑ]+,\s*[A-ZÁÉÍÓÚÑ ]+)/);
+    return tm ? tm[1].trim() : null;
   }
 
   function detectModule() {
@@ -164,12 +201,13 @@
 
   // ====== Menú contextual flotante ======
   const MENU_ACTIONS = [
-    { id: 'librar',           label: '🆓 Librar este día' },
-    { id: 'whoCovers',        label: '👥 ¿Quién cubre?' },
-    { id: 'vacaciones',       label: '🏖️ Marcar vacaciones' },
-    { id: 'cambio',           label: '🔁 Proponer cambio' },
-    { id: 'validateConvenio', label: '⚖️ Validar convenio' },
-    { id: 'alternativas',     label: '🧠 Alternativas IA' }
+    { id: 'librar',           label: '🆓 Librar este día', group: 'ai' },
+    { id: 'whoCovers',        label: '👥 ¿Quién cubre?', group: 'ai' },
+    { id: 'vacaciones',       label: '🏖️ Marcar vacaciones', group: 'ai' },
+    { id: 'cambio',           label: '🔁 Proponer cambio', group: 'ai' },
+    { id: 'validateConvenio', label: '⚖️ Validar convenio', group: 'ai' },
+    { id: 'alternativas',     label: '🧠 Alternativas IA', group: 'ai' },
+    { id: 'syncCellChange',   label: '📥 Volcar cambio sin IA a Shiftia', group: 'sync' }
   ];
 
   function closeMenu() {
@@ -199,9 +237,24 @@
       menuEl.appendChild(sub);
     }
 
-    MENU_ACTIONS.forEach((act) => {
+    // Acciones IA (deterministas, sobre la planilla interna)
+    MENU_ACTIONS.filter(a => a.group === 'ai').forEach((act) => {
       const btn = document.createElement('button');
       btn.className = 'shiftia-ctx-btn';
+      btn.textContent = act.label;
+      btn.addEventListener('click', () => runAction(act.id, cell));
+      menuEl.appendChild(btn);
+    });
+
+    // Separador visual + acción de sincronización sin IA
+    const sep = document.createElement('div');
+    sep.className = 'shiftia-ctx-sep';
+    sep.textContent = 'Sincronización';
+    menuEl.appendChild(sep);
+
+    MENU_ACTIONS.filter(a => a.group === 'sync').forEach((act) => {
+      const btn = document.createElement('button');
+      btn.className = 'shiftia-ctx-btn shiftia-ctx-btn-sync';
       btn.textContent = act.label;
       btn.addEventListener('click', () => runAction(act.id, cell));
       menuEl.appendChild(btn);
