@@ -84,6 +84,17 @@ async function askEngine({ action, args }) {
       dataSnapshot: cachedData ? { at: cachedAt, hasData: true } : null
     })
   });
-  if (!res.ok) return { ok: false, error: `HTTP ${res.status} en /api/assistant/${action}` };
+  if (res.status === 401) {
+    // Token expirado o invalidado. Limpiar y avisar al sidepanel para que pida login.
+    await chrome.storage.local.remove(['shiftiaToken', 'shiftiaData', 'shiftiaDataAt']);
+    cachedData = null; cachedAt = 0;
+    chrome.runtime.sendMessage({ type: 'panel:sessionExpired' }).catch(() => {});
+    return { ok: false, error: 'Sesión caducada. Vuelve a iniciar sesión en el panel lateral.' };
+  }
+  if (!res.ok) {
+    let msg = `Error ${res.status}`;
+    try { const body = await res.json(); if (body.error) msg = body.error; } catch (_) {}
+    return { ok: false, error: msg };
+  }
   return { ok: true, data: await res.json() };
 }

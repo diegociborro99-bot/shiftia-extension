@@ -79,6 +79,13 @@ async function triggerSync() {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'panel:context') renderContext(msg.payload);
+  if (msg?.type === 'panel:sessionExpired') {
+    els.authBox.hidden = false;
+    els.status.textContent = 'Sesión caducada';
+    els.status.classList.remove('connected');
+    els.status.classList.add('disconnected');
+    els.loginErr.textContent = 'La sesión expiró. Vuelve a entrar.';
+  }
 });
 
 chrome.runtime.sendMessage({ type: 'panel:requestContext' }, (res) => {

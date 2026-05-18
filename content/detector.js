@@ -95,7 +95,9 @@
     let workerId = null, day = null, month = null, year = null;
     if (m) {
       workerId = m[1];
-      day = parseInt(m[2], 10);
+      // SARA almacena scheduleData[year-month][wId] como array 0-indexed (día 1 -> [0]).
+      // Actais codifica el día como 1-31. Convertimos a 0-based aquí.
+      day = parseInt(m[2], 10) - 1;
       month = parseInt(m[3], 10) - 1;
       year = parseInt(m[4], 10);
     }
@@ -181,8 +183,8 @@
     menuEl.style.left = `${x}px`;
     menuEl.style.top = `${y}px`;
 
-    const dateStr = (cell.day && cell.month != null && cell.year)
-      ? `${String(cell.day).padStart(2, '0')}/${String(cell.month + 1).padStart(2, '0')}/${cell.year}`
+    const dateStr = (cell.day != null && cell.month != null && cell.year)
+      ? `${String(cell.day + 1).padStart(2, '0')}/${String(cell.month + 1).padStart(2, '0')}/${cell.year}`
       : 'fecha ?';
 
     const header = document.createElement('div');
