@@ -1,4 +1,4 @@
-const SHIFTIA_API_BASE = 'https://shiftia-director-production.up.railway.app';
+const SHIFTIA_API_BASE = 'https://shiftia-production.up.railway.app';
 
 let lastContext = null;
 let cachedData = null;

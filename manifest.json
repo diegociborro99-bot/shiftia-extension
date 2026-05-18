@@ -12,7 +12,7 @@
   ],
   "host_permissions": [
     "*://personal.hospitaldejove.com/*",
-    "https://shiftia-director-production.up.railway.app/*"
+    "https://shiftia-production.up.railway.app/*"
   ],
   "background": {
     "service_worker": "background/sw.js",
