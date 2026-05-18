@@ -11,7 +11,8 @@
     "notifications"
   ],
   "host_permissions": [
-    "*://personal.hospitaldejove.com/*"
+    "*://personal.hospitaldejove.com/*",
+    "https://shiftia-director-production.up.railway.app/*"
   ],
   "background": {
     "service_worker": "background/sw.js",
