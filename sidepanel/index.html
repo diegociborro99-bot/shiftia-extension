@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shiftia · Asistente</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="sx-header">
+  <div class="sx-logo">Shiftia</div>
+  <div class="sx-status" id="sx-status">—</div>
+</header>
+
+<section class="sx-auth" id="sx-auth" hidden>
+  <p>Inicia sesión con tu cuenta Shiftia para cargar las planillas.</p>
+  <input id="sx-email" type="email" placeholder="email" autocomplete="username" />
+  <input id="sx-pass" type="password" placeholder="contraseña" autocomplete="current-password" />
+  <button id="sx-login-btn">Entrar</button>
+  <small id="sx-login-err"></small>
+</section>
+
+<section class="sx-context" id="sx-context">
+  <div class="sx-context-row"><span class="sx-k">Trabajador</span><span class="sx-v" id="sx-worker">—</span></div>
+  <div class="sx-context-row"><span class="sx-k">Módulo Actais</span><span class="sx-v" id="sx-module">—</span></div>
+  <div class="sx-context-row"><span class="sx-k">Sincronización</span><span class="sx-v" id="sx-sync">—</span></div>
+</section>
+
+<section class="sx-help">
+  <strong>Uso rápido</strong>
+  <p>Abre la planilla del trabajador en Actais y <kbd>Alt</kbd>+click sobre una celda. Aparecerá el menú con acciones.</p>
+  <button id="sx-sync-btn">🔄 Sincronizar ahora</button>
+</section>
+
+<footer class="sx-footer">
+  <small>v0.1 · sin coste por consulta</small>
+</footer>
+
+<script type="module" src="index.js"></script>
+</body>
+</html>

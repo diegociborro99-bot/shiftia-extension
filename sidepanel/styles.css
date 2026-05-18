@@ -1,0 +1,101 @@
+:root {
+  --bg: #f8fafc;
+  --bg-2: #ffffff;
+  --text: #1e293b;
+  --text-2: #64748b;
+  --border: #e2e8f0;
+  --accent: #0f7a6d;
+  --accent-2: #4ecdc4;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.sx-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+.sx-logo {
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.sx-status { font-size: 11px; color: var(--text-2); }
+
+.sx-auth {
+  padding: 14px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+.sx-auth p { margin: 0; font-size: 12px; color: var(--text-2); }
+.sx-auth input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sx-auth button {
+  padding: 8px 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sx-auth small { color: #dc2626; min-height: 14px; }
+
+.sx-context {
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+}
+.sx-context-row { display: flex; justify-content: space-between; font-size: 12px; }
+.sx-k { color: var(--text-2); }
+.sx-v { font-weight: 600; }
+
+.sx-help {
+  padding: 12px 14px;
+}
+.sx-help strong { display: block; font-size: 12px; margin-bottom: 6px; color: var(--text); }
+.sx-help p { margin: 0 0 10px; font-size: 12px; color: var(--text-2); }
+.sx-help kbd {
+  font-family: ui-monospace, monospace;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+.sx-help button {
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sx-footer {
+  padding: 8px 14px;
+  text-align: center;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+}
