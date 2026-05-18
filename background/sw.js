@@ -5,6 +5,10 @@ let cachedData = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+function workerCount(d) {
+  return (d?.workerMeta?.length) || (d?.workers?.length) || 0;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 });
@@ -33,6 +37,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.set({ shiftiaToken: msg.payload.token }).then(() => sendResponse({ ok: true }));
       return true;
 
+    case 'shiftia:uploadPdfs':
+      uploadPdfs(msg.payload).then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+
     default:
       return false;
   }
@@ -47,7 +55,7 @@ async function syncShiftiaData(force = false) {
   if (!token) return { ok: false, error: 'Sin sesión Shiftia' };
   const now = Date.now();
   if (!force && cachedData && now - cachedAt < CACHE_TTL_MS) {
-    return { ok: true, data: { workers: cachedData.workers?.length || 0, fromCache: true } };
+    return { ok: true, data: { workers: workerCount(cachedData), fromCache: true } };
   }
   const res = await fetch(`${SHIFTIA_API_BASE}/api/data`, {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -56,7 +64,7 @@ async function syncShiftiaData(force = false) {
   cachedData = await res.json();
   cachedAt = now;
   await chrome.storage.local.set({ shiftiaData: cachedData, shiftiaDataAt: cachedAt });
-  return { ok: true, data: { workers: cachedData.workers?.length || 0, fromCache: false } };
+  return { ok: true, data: { workers: workerCount(cachedData), fromCache: false } };
 }
 
 async function askEngine({ action, args }) {
@@ -85,7 +93,6 @@ async function askEngine({ action, args }) {
     })
   });
   if (res.status === 401) {
-    // Token expirado o invalidado. Limpiar y avisar al sidepanel para que pida login.
     await chrome.storage.local.remove(['shiftiaToken', 'shiftiaData', 'shiftiaDataAt']);
     cachedData = null; cachedAt = 0;
     chrome.runtime.sendMessage({ type: 'panel:sessionExpired' }).catch(() => {});
@@ -97,4 +104,36 @@ async function askEngine({ action, args }) {
     return { ok: false, error: msg };
   }
   return { ok: true, data: await res.json() };
+}
+
+// Sube una lista de PDFs serializados (Uint8Array transferidos) al backend
+// como multipart/form-data. El backend hace el parsing y merge.
+async function uploadPdfs({ files }) {
+  const token = await getToken();
+  if (!token) return { ok: false, error: 'Inicia sesión antes de importar' };
+  if (!Array.isArray(files) || files.length === 0) return { ok: false, error: 'Sin archivos' };
+
+  const form = new FormData();
+  for (const f of files) {
+    const blob = new Blob([new Uint8Array(f.data)], { type: 'application/pdf' });
+    form.append('files', blob, f.name);
+  }
+  const res = await fetch(`${SHIFTIA_API_BASE}/api/import/pdf-upload`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: form
+  });
+  if (res.status === 401) {
+    chrome.runtime.sendMessage({ type: 'panel:sessionExpired' }).catch(() => {});
+    return { ok: false, error: 'Sesión caducada' };
+  }
+  if (!res.ok) {
+    let msg = `Error ${res.status}`;
+    try { const body = await res.json(); if (body.error) msg = body.error; } catch (_) {}
+    return { ok: false, error: msg };
+  }
+  const body = await res.json();
+  // Invalidar cache para que la próxima consulta refresque
+  cachedData = null; cachedAt = 0;
+  return { ok: true, data: body };
 }

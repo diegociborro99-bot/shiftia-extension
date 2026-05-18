@@ -24,17 +24,42 @@
   <small id="sx-login-err"></small>
 </section>
 
-<section class="sx-context" id="sx-context">
-  <div class="sx-context-title">Contexto detectado</div>
-  <div class="sx-context-row"><span class="sx-k">Trabajador</span><span class="sx-v" id="sx-worker">—</span></div>
-  <div class="sx-context-row"><span class="sx-k">Módulo Actais</span><span class="sx-v" id="sx-module">—</span></div>
-  <div class="sx-context-row"><span class="sx-k">Sincronización</span><span class="sx-v" id="sx-sync">—</span></div>
+<nav class="sx-tabs" role="tablist">
+  <button class="sx-tab active" data-tab="assistant" role="tab">Asistente</button>
+  <button class="sx-tab" data-tab="import" role="tab">Importar</button>
+</nav>
+
+<section class="sx-pane active" data-pane="assistant">
+  <div class="sx-context">
+    <div class="sx-context-title">Contexto detectado</div>
+    <div class="sx-context-row"><span class="sx-k">Trabajador</span><span class="sx-v" id="sx-worker">—</span></div>
+    <div class="sx-context-row"><span class="sx-k">Módulo Actais</span><span class="sx-v" id="sx-module">—</span></div>
+    <div class="sx-context-row"><span class="sx-k">Sincronización</span><span class="sx-v" id="sx-sync">—</span></div>
+  </div>
+
+  <div class="sx-help">
+    <strong>Uso rápido</strong>
+    <p>Abre la planilla del trabajador en Actais y haz <kbd>Alt</kbd>+click sobre cualquier día. Aparecerá el menú flotante con las acciones del asistente: librar, sustitutos, validar convenio, alternativas IA, y volcar cambios sin IA.</p>
+    <button id="sx-sync-btn">↻ Sincronizar ahora</button>
+  </div>
 </section>
 
-<section class="sx-help">
-  <strong>Uso rápido</strong>
-  <p>Abre la planilla del trabajador en Actais y haz <kbd>Alt</kbd>+click sobre cualquier día. Aparecerá el menú flotante con las acciones del asistente: librar, sustitutos, validar convenio, alternativas IA, y más.</p>
-  <button id="sx-sync-btn">↻ Sincronizar ahora</button>
+<section class="sx-pane" data-pane="import">
+  <div class="sx-import">
+    <div class="sx-context-title">Importar planificación anual</div>
+    <p class="sx-import-hint">Selecciona o arrastra los PDFs anuales por empleado de Actais. Solo se necesita hacer una vez por trabajador (la data queda guardada en el backend de Shiftia).</p>
+    <label class="sx-drop" id="sx-drop">
+      <input type="file" id="sx-files" multiple accept=".pdf,application/pdf" hidden>
+      <div class="sx-drop-inner">
+        <div class="sx-drop-icon">📄</div>
+        <div class="sx-drop-text">Arrastra PDFs aquí o haz clic para seleccionar</div>
+        <div class="sx-drop-sub">Hasta 200 archivos · 5 MB cada uno</div>
+      </div>
+    </label>
+    <button id="sx-upload-btn" class="sx-primary" disabled>Subir 0 PDFs</button>
+    <ul class="sx-file-list" id="sx-file-list"></ul>
+    <div class="sx-import-summary" id="sx-import-summary" hidden></div>
+  </div>
 </section>
 
 <footer class="sx-footer">

@@ -10,8 +10,15 @@ const els = {
   pass: document.getElementById('sx-pass'),
   loginBtn: document.getElementById('sx-login-btn'),
   loginErr: document.getElementById('sx-login-err'),
-  syncBtn: document.getElementById('sx-sync-btn')
+  syncBtn: document.getElementById('sx-sync-btn'),
+  drop: document.getElementById('sx-drop'),
+  filesInput: document.getElementById('sx-files'),
+  fileList: document.getElementById('sx-file-list'),
+  uploadBtn: document.getElementById('sx-upload-btn'),
+  importSummary: document.getElementById('sx-import-summary')
 };
+
+let selectedFiles = [];
 
 function renderContext(ctx) {
   if (!ctx) {
@@ -75,6 +82,117 @@ async function triggerSync() {
     return;
   }
   els.sync.textContent = `${new Date().toLocaleTimeString()} · ${res.data?.workers ?? 0} trabajadores`;
+}
+
+// ============ Tabs ============
+document.querySelectorAll('.sx-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.sx-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.sx-pane').forEach(p => {
+      p.classList.toggle('active', p.dataset.pane === tab.dataset.tab);
+    });
+  });
+});
+
+// ============ Import ============
+function refreshFileList() {
+  els.fileList.innerHTML = '';
+  selectedFiles.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.className = 'sx-file-item ' + (f.status || 'pending');
+    li.innerHTML = `
+      <span class="sx-file-name">${escapeHtml(f.name)}</span>
+      <span class="sx-file-meta">${(f.size / 1024).toFixed(0)} KB</span>
+      <span class="sx-file-status">${f.statusLabel || ''}</span>
+    `;
+    if (!f.status) {
+      const rm = document.createElement('button');
+      rm.className = 'sx-file-remove';
+      rm.textContent = '×';
+      rm.title = 'Quitar';
+      rm.addEventListener('click', () => { selectedFiles.splice(i, 1); refreshFileList(); });
+      li.appendChild(rm);
+    }
+    els.fileList.appendChild(li);
+  });
+  els.uploadBtn.disabled = selectedFiles.length === 0 || selectedFiles.some(f => f.status === 'uploading');
+  els.uploadBtn.textContent = `Subir ${selectedFiles.length} PDF${selectedFiles.length === 1 ? '' : 's'}`;
+}
+
+function addFiles(fileList) {
+  for (const f of Array.from(fileList)) {
+    if (!/\.pdf$/i.test(f.name)) continue;
+    if (selectedFiles.some(x => x.name === f.name && x.size === f.size)) continue;
+    selectedFiles.push({ name: f.name, size: f.size, file: f, status: null });
+  }
+  refreshFileList();
+}
+
+els.filesInput.addEventListener('change', e => addFiles(e.target.files));
+
+['dragover', 'dragenter'].forEach(ev =>
+  els.drop.addEventListener(ev, e => { e.preventDefault(); els.drop.classList.add('hover'); })
+);
+['dragleave', 'drop'].forEach(ev =>
+  els.drop.addEventListener(ev, e => { e.preventDefault(); els.drop.classList.remove('hover'); })
+);
+els.drop.addEventListener('drop', e => {
+  if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
+});
+
+els.uploadBtn.addEventListener('click', async () => {
+  if (selectedFiles.length === 0) return;
+  els.uploadBtn.disabled = true;
+  els.importSummary.hidden = true;
+
+  selectedFiles.forEach(f => { f.status = 'uploading'; f.statusLabel = 'subiendo…'; });
+  refreshFileList();
+
+  try {
+    // Leer los archivos como ArrayBuffer y mandarlos al SW (que hace FormData)
+    const payload = await Promise.all(selectedFiles.map(async (f) => ({
+      name: f.name,
+      data: Array.from(new Uint8Array(await f.file.arrayBuffer()))
+    })));
+    const res = await chrome.runtime.sendMessage({ type: 'shiftia:uploadPdfs', payload: { files: payload } });
+    if (!res?.ok) throw new Error(res?.error || 'Error al subir');
+
+    const itemsByName = {};
+    (res.data.items || []).forEach(it => { itemsByName[it.filename] = it; });
+    selectedFiles.forEach(f => {
+      const it = itemsByName[f.name];
+      if (!it) { f.status = 'failed'; f.statusLabel = 'sin respuesta'; return; }
+      f.status = it.status;
+      const tag = {
+        created: 'creado',
+        updated: 'actualizado',
+        pending: `pendiente (${it.confidence}%)`,
+        failed: 'fallo: ' + (it.reason || '?')
+      }[it.status] || it.status;
+      f.statusLabel = tag;
+    });
+    refreshFileList();
+
+    const s = res.data.summary || {};
+    els.importSummary.hidden = false;
+    els.importSummary.innerHTML = `
+      <strong>Resumen</strong>
+      <div>Procesados: ${s.processed}</div>
+      <div>Actualizados: ${s.updated}</div>
+      <div>Creados: ${s.created}</div>
+      <div>Pendientes: ${s.pending}</div>
+      <div>Fallidos: ${s.failed}</div>
+    `;
+    // Forzar resync para que el sidepanel actualice el contador de trabajadores
+    triggerSync();
+  } catch (e) {
+    selectedFiles.forEach(f => { if (f.status === 'uploading') { f.status = 'failed'; f.statusLabel = e.message; } });
+    refreshFileList();
+  }
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
