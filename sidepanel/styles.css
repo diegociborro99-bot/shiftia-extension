@@ -1,101 +1,254 @@
 :root {
-  --bg: #f8fafc;
+  --bg: #f6f9fa;
   --bg-2: #ffffff;
-  --text: #1e293b;
-  --text-2: #64748b;
-  --border: #e2e8f0;
+  --bg-elevated: rgba(255, 255, 255, 0.85);
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #94a3b8;
+  --border: #e5edef;
+  --border-2: #cfd8da;
   --accent: #0f7a6d;
   --accent-2: #4ecdc4;
+  --accent-soft: rgba(15, 122, 109, 0.08);
+  --accent-soft-2: rgba(78, 205, 196, 0.18);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 28px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --grad: linear-gradient(135deg, #0f7a6d 0%, #4ecdc4 100%);
 }
 
 * { box-sizing: border-box; }
+html, body { height: 100%; }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 0% 0%, rgba(78, 205, 196, 0.10) 0%, transparent 60%),
+    radial-gradient(800px 400px at 100% 100%, rgba(15, 122, 109, 0.08) 0%, transparent 60%),
+    var(--bg);
   color: var(--text);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.005em;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
+/* ── Header ─────────────────────────────────────────── */
 .sx-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px;
-  background: var(--bg-2);
+  padding: 14px 16px 12px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
+}
+.sx-logo-group { display: flex; align-items: center; gap: 10px; }
+.sx-logo-mark {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--grad);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 4px 10px rgba(15, 122, 109, 0.32);
+  letter-spacing: -0.02em;
 }
 .sx-logo {
   font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-size: 15px;
+  background: var(--grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  letter-spacing: -0.02em;
 }
-.sx-status { font-size: 11px; color: var(--text-2); }
+.sx-status {
+  font-size: 11px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sx-status::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.sx-status.connected::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sx-status.disconnected::before { background: #ef4444; }
 
+/* ── Auth (login) ───────────────────────────────────── */
 .sx-auth {
-  padding: 14px;
+  margin: 14px 14px 0;
+  padding: 16px;
   background: var(--bg-2);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 10px;
+}
+.sx-auth p { margin: 0 0 4px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.sx-auth input {
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: #fff;
+  font-family: inherit;
+}
+.sx-auth input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sx-auth button {
+  padding: 10px 14px;
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.05s, box-shadow 0.15s;
+  font-family: inherit;
+}
+.sx-auth button:hover { box-shadow: 0 6px 16px rgba(15, 122, 109, 0.3); }
+.sx-auth button:active { transform: translateY(1px); }
+.sx-auth small {
+  color: #dc2626;
+  font-size: 11px;
+  min-height: 14px;
+  padding-left: 2px;
+}
+
+/* ── Context card ───────────────────────────────────── */
+.sx-context {
+  margin: 14px 14px 0;
+  padding: 14px 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   display: grid;
   gap: 8px;
 }
-.sx-auth p { margin: 0; font-size: 12px; color: var(--text-2); }
-.sx-auth input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
-}
-.sx-auth button {
-  padding: 8px 12px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.sx-auth small { color: #dc2626; min-height: 14px; }
-
-.sx-context {
-  padding: 12px 14px;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--border);
-  display: grid;
-  gap: 6px;
-}
-.sx-context-row { display: flex; justify-content: space-between; font-size: 12px; }
-.sx-k { color: var(--text-2); }
-.sx-v { font-weight: 600; }
-
-.sx-help {
-  padding: 12px 14px;
-}
-.sx-help strong { display: block; font-size: 12px; margin-bottom: 6px; color: var(--text); }
-.sx-help p { margin: 0 0 10px; font-size: 12px; color: var(--text-2); }
-.sx-help kbd {
-  font-family: ui-monospace, monospace;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
+.sx-context-title {
   font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+.sx-context-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  gap: 12px;
+}
+.sx-k { color: var(--text-2); font-size: 12px; flex-shrink: 0; }
+.sx-v {
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  word-break: break-word;
+  max-width: 70%;
+}
+
+/* ── Help / Quick use ──────────────────────────────── */
+.sx-help {
+  margin: 14px 14px 0;
+  padding: 14px 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.sx-help strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+.sx-help p {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.sx-help kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-soft-2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
 }
 .sx-help button {
-  padding: 8px 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+  font-family: inherit;
 }
+.sx-help button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
+/* ── Footer ─────────────────────────────────────────── */
 .sx-footer {
-  padding: 8px 14px;
+  margin-top: auto;
+  padding: 12px 16px 14px;
   text-align: center;
-  color: var(--text-2);
   border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
+.sx-version {
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.sx-attribution {
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+.sx-attribution a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+.sx-attribution a:hover { opacity: 1; text-decoration: underline; }
+
+/* ── Hidden helper ──────────────────────────────────── */
+[hidden] { display: none !important; }

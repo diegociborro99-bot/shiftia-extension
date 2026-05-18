@@ -1,73 +1,151 @@
+/* ── Shiftia: menú contextual flotante encima de Actais ─────────────── */
+
+@keyframes shiftia-menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
 .shiftia-ctx-menu {
   position: absolute;
   z-index: 999999;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid #e5edef;
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 16px 40px rgba(15, 23, 42, 0.14),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
   font-size: 13px;
-  color: #1e293b;
-  min-width: 240px;
-  max-width: 320px;
-  padding: 8px 6px;
+  color: #0f172a;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 10px 8px 12px;
+  animation: shiftia-menu-in 0.16s cubic-bezier(0.18, 0.89, 0.32, 1.18);
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
 }
 
 .shiftia-ctx-header {
   font-weight: 700;
-  font-size: 12px;
-  padding: 6px 10px 8px;
-  border-bottom: 1px solid #e2e8f0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px 8px;
   margin-bottom: 6px;
+  border-bottom: 1px solid #e5edef;
   color: #0f7a6d;
 }
 
+.shiftia-ctx-sub {
+  font-size: 11px;
+  font-style: italic;
+  color: #64748b;
+  padding: 0 10px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e5edef;
+}
+
 .shiftia-ctx-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
-  color: #1e293b;
-  margin: 2px 0;
+  font-weight: 500;
+  color: #0f172a;
+  margin: 1px 0;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+  letter-spacing: -0.005em;
 }
 .shiftia-ctx-btn:hover {
-  background: #f1f5f9;
+  background: rgba(15, 122, 109, 0.08);
+  color: #0f7a6d;
+}
+.shiftia-ctx-btn:active {
+  background: rgba(15, 122, 109, 0.16);
 }
 
 .shiftia-ctx-close {
   position: absolute;
-  top: 4px;
-  right: 6px;
+  top: 6px;
+  right: 8px;
   background: transparent;
   border: none;
-  font-size: 18px;
+  font-size: 20px;
   color: #94a3b8;
   cursor: pointer;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
 }
-.shiftia-ctx-close:hover { color: #1e293b; }
+.shiftia-ctx-close:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+}
 
 .shiftia-ctx-result {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   font-size: 12px;
-  max-height: 220px;
+  max-height: 240px;
   overflow-y: auto;
+  line-height: 1.5;
 }
+.shiftia-ctx-result strong { font-weight: 700; color: #0f172a; }
 .shiftia-ctx-result pre {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   font-size: 11px;
   white-space: pre-wrap;
+  color: #1e293b;
 }
-.shiftia-ctx-result ul { margin: 4px 0 0 16px; padding: 0; }
-.shiftia-ctx-err { color: #dc2626; font-weight: 600; }
+.shiftia-ctx-result ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.shiftia-ctx-result li {
+  margin: 6px 0;
+  padding: 2px 0;
+}
+.shiftia-ctx-result li b { color: #0f7a6d; }
+.shiftia-ctx-result li small {
+  color: #64748b;
+  font-size: 10.5px;
+}
+.shiftia-ctx-err {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.shiftia-ctx-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5edef;
+  font-size: 9.5px;
+  color: #94a3b8;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.shiftia-ctx-footer a {
+  color: #0f7a6d;
+  text-decoration: none;
+  font-weight: 500;
+}
+.shiftia-ctx-footer a:hover { text-decoration: underline; }

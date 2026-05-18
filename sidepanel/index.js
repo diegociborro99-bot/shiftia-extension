@@ -14,8 +14,15 @@ const els = {
 };
 
 function renderContext(ctx) {
-  if (!ctx) { els.status.textContent = 'Sin contexto'; return; }
-  els.status.textContent = 'Conectado a Actais';
+  if (!ctx) {
+    els.status.textContent = 'Sin contexto';
+    els.status.classList.remove('connected');
+    els.status.classList.add('disconnected');
+    return;
+  }
+  els.status.textContent = ctx.hasCalendar ? 'Calendario detectado' : 'En Actais';
+  els.status.classList.add('connected');
+  els.status.classList.remove('disconnected');
   els.module.textContent = ctx.module || '—';
   els.worker.textContent = ctx.worker || '—';
 }

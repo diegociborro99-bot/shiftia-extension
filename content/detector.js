@@ -4,25 +4,84 @@
   const SELECTOR_CALENDAR_CONTAINER = '#workerCalendarTotalContainer, #MonthTable';
   const SELECTOR_CALENDAR_CELL = '.month-calendar-cell';
 
-  // Mapeo S_X → código interno Shiftia
+  // Mapeo S_X → código interno Shiftia. S_X confirmados con HTML real del
+  // calendario de Actais (Hospital de Jove). El resto son hipótesis basadas
+  // en el PDF de planificación anual; ajustables conforme aparezcan.
   const SHIFT_CODE_MAP = {
-    'S_1':  { code: 'M',   label: 'Mañanas' },
+    'S_1':  { code: 'M',   label: 'Mañana', reduced: false },
     'S_10': { code: 'D',   label: 'Descanso' },
-    'S_30': { code: 'T',   label: 'Tardes' },
-    'S_40': { code: 'N',   label: 'Noches' },     // hipotético, ajustable
-    'S_50': { code: 'VAC', label: 'Vacaciones' }, // hipotético
-    'S_60': { code: 'BAJ', label: 'Baja' }        // hipotético
+    'S_30': { code: 'T',   label: 'Tarde' }
+    // Hipótesis pendientes de confirmar con HTML real:
+    // 'S_X': { code: 'N',   label: 'Noche' },
+    // 'S_X': { code: 'M7H', label: 'Mañana 7H', reduced: true },
+    // 'S_X': { code: 'M8',  label: 'Mañana 8H' },
+    // 'S_X': { code: 'VAC', label: 'Vacaciones' },
+    // 'S_X': { code: 'BAJ', label: 'Baja' },
+    // 'S_X': { code: 'SP',  label: 'Sin Planificar' },
+    // 'S_X': { code: 'CJ',  label: 'Cómputo Jornada' },
+    // 'S_X': { code: 'FOR', label: 'Formación' },
+    // 'S_X': { code: 'HS',  label: 'Horas Sindicales' }
   };
 
-  // Fallback por texto
+  // Catálogo completo de códigos válidos (espejado de shiftia-director).
+  // Sirve como referencia para validación + UI.
+  const VALID_SHIFTS = {
+    M:    { label: 'Mañana', category: 'work', hours: null },
+    M7H:  { label: 'Mañana 07:00–14:00', category: 'work', hours: 7, reduced: true },
+    M8:   { label: 'Mañana 07:00–15:00', category: 'work', hours: 8 },
+    M4H:  { label: 'Mañana 08:00–12:00', category: 'work', hours: 4, reduced: true },
+    M6:   { label: 'Mañana 08:00–14:00', category: 'work', hours: 6, reduced: true },
+    M55:  { label: 'Mañana 5,5h', category: 'work', hours: 5.5, reduced: true },
+    M6R:  { label: 'Mañana 6h reducida', category: 'work', hours: 6, reduced: true },
+    MR:   { label: 'Mañana reducida', category: 'work', reduced: true },
+    T:    { label: 'Tarde 15:00–22:00', category: 'work', hours: 7 },
+    N:    { label: 'Noche 22:00–08:00', category: 'work', hours: 10 },
+    D:    { label: 'Descanso', category: 'rest' },
+    L:    { label: 'Libre', category: 'rest' },
+    LD:   { label: 'Libre Disposición', category: 'rest' },
+    FN:   { label: 'Festivo Nacional', category: 'rest' },
+    SP:   { label: 'Sin Planificar', category: 'unplanned', color: 'gray' },
+    VAC:  { label: 'Vacaciones', category: 'absence' },
+    VAN:  { label: 'Vacaciones arrastradas', category: 'absence' },
+    VAA:  { label: 'Vacaciones Año Anterior', category: 'absence' },
+    BAJ:  { label: 'Baja', category: 'absence' },
+    LAC:  { label: 'Lactancia', category: 'absence' },
+    AE:   { label: 'Asuntos propios', category: 'absence' },
+    EX:   { label: 'Excedencia', category: 'absence' },
+    PM:   { label: 'Permiso', category: 'absence' },
+    MTC:  { label: 'Motivo familiar', category: 'absence' },
+    CJ:   { label: 'Cómputo de Jornada', category: 'compensatory', hours: 7 },
+    CAA:  { label: 'Cómputo Año Anterior', category: 'compensatory' },
+    DLA:  { label: 'Días Libre Disp. Año Anterior', category: 'compensatory' },
+    FOR:  { label: 'Formación', category: 'training', hours: 7 },
+    HS:   { label: 'Horas Sindicales', category: 'union' },
+    HF:   { label: 'Horas Festivas', category: 'work' },
+    INT:  { label: 'Intervención', category: 'work' },
+    IQF:  { label: 'IQF', category: 'work' },
+    G17:  { label: 'Guardia 17h', category: 'guard', suffix: true },
+    G24:  { label: 'Guardia 24h', category: 'guard', suffix: true }
+  };
+
+  // Fallback por texto en .schedule (cuando no hay clase S_X conocida)
   const SHIFT_TEXT_MAP = [
-    { match: /mañana/i,  code: 'M' },
-    { match: /tarde/i,   code: 'T' },
-    { match: /noche/i,   code: 'N' },
-    { match: /descans/i, code: 'D' },
-    { match: /vacac/i,   code: 'VAC' },
-    { match: /baja/i,    code: 'BAJ' },
-    { match: /libre/i,   code: 'L' }
+    { match: /noche/i,          code: 'N' },
+    { match: /tarde/i,          code: 'T' },
+    { match: /mañana.*07:00.*14:00/i, code: 'M7H' },
+    { match: /mañana.*07:00.*15:00/i, code: 'M8' },
+    { match: /mañana.*08:00.*12:00/i, code: 'M4H' },
+    { match: /mañana.*08:00.*14:00/i, code: 'M6' },
+    { match: /mañana.*08:00.*15:00/i, code: 'M8' },
+    { match: /mañana/i,         code: 'M' },
+    { match: /descans/i,        code: 'D' },
+    { match: /vacac/i,          code: 'VAC' },
+    { match: /libre.*dispos/i,  code: 'LD' },
+    { match: /libre/i,          code: 'L' },
+    { match: /baja/i,           code: 'BAJ' },
+    { match: /lactanc/i,        code: 'LAC' },
+    { match: /formaci/i,        code: 'FOR' },
+    { match: /sindical/i,       code: 'HS' },
+    { match: /computo|cómputo/i, code: 'CJ' },
+    { match: /sin planif/i,     code: 'SP' }
   ];
 
   let lastContextSig = null;
@@ -149,8 +208,14 @@
     const close = document.createElement('button');
     close.className = 'shiftia-ctx-close';
     close.textContent = '×';
+    close.setAttribute('aria-label', 'Cerrar menú');
     close.addEventListener('click', closeMenu);
     menuEl.appendChild(close);
+
+    const footer = document.createElement('div');
+    footer.className = 'shiftia-ctx-footer';
+    footer.innerHTML = 'vibecoded by <a href="https://highkeylabs.es" target="_blank" rel="noopener">Highkey Labs</a>';
+    menuEl.appendChild(footer);
 
     document.body.appendChild(menuEl);
 
