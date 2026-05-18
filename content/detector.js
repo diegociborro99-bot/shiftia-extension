@@ -102,7 +102,7 @@
       year = parseInt(m[4], 10);
     }
 
-    // Tipo de turno: primero por clase S_X, luego por texto .schedule
+    // Tipo de turno: primero por clase S_X, luego por texto .schedule.
     let shift = null, shiftLabel = null;
     const sClass = Array.from(cellEl.classList).find(c => /^S_\d+$/.test(c));
     if (sClass && SHIFT_CODE_MAP[sClass]) {
@@ -113,6 +113,26 @@
       shiftLabel = scheduleText;
       for (const m of SHIFT_TEXT_MAP) {
         if (m.match.test(scheduleText)) { shift = m.code; break; }
+      }
+    }
+
+    // OVERLAY DE INCIDENCIA: Actais pinta una barra azul ARRIBA del turno
+    // cuando hay VAC, BAJ, LAC, FOR, etc. La barra normalmente es un span/div
+    // con el código. Si encontramos algo así, lo prioriza sobre el turno base.
+    const overlayText = (
+      cellEl.querySelector('.info-complete')?.textContent ||
+      cellEl.querySelector('[class*="incidencia"]')?.textContent ||
+      cellEl.querySelector('[class*="absence"]')?.textContent ||
+      ''
+    ).trim().toUpperCase();
+    const upperCellText = (cellEl.textContent || '').toUpperCase();
+    const OVERLAY_CODES = ['VAC', 'VAN', 'VAA', 'BAJ', 'LAC', 'FOR', 'CJ', 'CAA', 'DLA', 'HS', 'AE', 'EX', 'PM', 'MTC', 'IT'];
+    for (const code of OVERLAY_CODES) {
+      const re = new RegExp('\\b' + code + '\\b');
+      if (re.test(overlayText) || re.test(upperCellText)) {
+        shift = code;
+        shiftLabel = (VALID_SHIFTS[code]?.label || code) + ' (overlay sobre ' + (shiftLabel || '?') + ')';
+        break;
       }
     }
 
@@ -173,7 +193,18 @@
 
     // 5. Title.
     const tm = document.title.match(/([A-ZÁÉÍÓÚÑ]+,\s*[A-ZÁÉÍÓÚÑ ]+)/);
-    return tm ? tm[1].trim() : null;
+    if (tm) return tm[1].trim();
+
+    // 6. Último recurso: regex agresivo sobre el body completo.
+    // En Actais el header siempre tiene "Bienvenido, NOMBRE APELLIDO (CATEGORIA - …)"
+    // o "APELLIDOS, NOMBRE" cerca del calendario.
+    const bodyText = (document.body?.innerText || '').slice(0, 4000);
+    const welcomeMatch = bodyText.match(/Bienvenido,\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+?)(?=\s*\(|\s*\n)/);
+    if (welcomeMatch) return welcomeMatch[1].trim();
+    const generalMatch = bodyText.match(/\b([A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){1,4},\s*[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,})?)\b/);
+    if (generalMatch) return generalMatch[1].trim();
+
+    return null;
   }
 
   function detectModule() {
