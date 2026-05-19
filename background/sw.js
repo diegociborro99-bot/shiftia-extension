@@ -1,3 +1,5 @@
+import { runLocalAction } from './engine.js';
+
 const SHIFTIA_API_BASE = 'https://shiftia-production.up.railway.app';
 
 // Mapeo de acciones del menú flotante a los endpoints reales del backend
@@ -11,6 +13,8 @@ const ACTION_ENDPOINT = {
   validateConvenio: 'validateConvenio',
   alternativas:     'aiAlternatives'
 };
+
+const PENDING_KEY = 'shiftiaPendingSync';
 
 let lastContext = null;
 let cachedData = null;
@@ -85,6 +89,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       backendHealth().then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;
 
+    case 'shiftia:pendingList':
+      getPending().then(list => sendResponse({ ok: true, data: list }));
+      return true;
+
+    case 'shiftia:flushPending':
+      flushPending().then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+
+    case 'shiftia:clearPending':
+      chrome.storage.local.set({ [PENDING_KEY]: [] }).then(() => {
+        notifyPendingCount();
+        sendResponse({ ok: true });
+      });
+      return true;
+
     default:
       return false;
   }
@@ -127,11 +146,18 @@ async function askEngine({ action, args }) {
     }
   }
   const token = await getToken();
-  if (!token) return { ok: false, error: 'Inicia sesión desde el panel lateral' };
+  const cell = normalizeCellPayload(args);
+
+  // Sin token → ir directamente al motor local (modo offline / sin sesión).
+  if (!token) {
+    const local = await runLocalAction(action, cell, cachedData);
+    if (local.ok) return local;
+    return { ok: false, error: 'Inicia sesión desde el panel lateral (o sincroniza para usar motor local).' };
+  }
 
   const endpoint = ACTION_ENDPOINT[action] || action;
   const url = `${SHIFTIA_API_BASE}/api/assistant/${endpoint}`;
-  let res;
+  let res, networkError = null;
   try {
     res = await fetch(url, {
       method: 'POST',
@@ -141,20 +167,37 @@ async function askEngine({ action, args }) {
       },
       body: JSON.stringify({
         action,
-        cell: normalizeCellPayload(args),
+        cell,
         context: lastContext,
         dataSnapshot: cachedData ? { at: cachedAt, hasData: true } : null
       })
     });
   } catch (e) {
-    return { ok: false, error: `Red caída o backend inaccesible: ${e.message}` };
+    networkError = e;
   }
+
+  // Caída de red → motor local.
+  if (networkError) {
+    const local = await runLocalAction(action, cell, cachedData);
+    if (local.ok) return local;
+    return { ok: false, error: `Red caída y motor local no pudo responder: ${networkError.message}` };
+  }
+
   if (res.status === 401) {
     await chrome.storage.local.remove(['shiftiaToken', 'shiftiaData', 'shiftiaDataAt']);
     cachedData = null; cachedAt = 0;
     chrome.runtime.sendMessage({ type: 'panel:sessionExpired' }).catch(() => {});
     return { ok: false, error: 'Sesión caducada. Vuelve a iniciar sesión en el panel lateral.' };
   }
+
+  // 404 del backend → caer al motor local. Cualquier otro error se propaga
+  // tal cual para no enmascarar 500 / 403 reales.
+  if (res.status === 404) {
+    const local = await runLocalAction(action, cell, cachedData);
+    if (local.ok) return local;
+    return { ok: false, error: describeHttpError(res, null), status: 404 };
+  }
+
   if (!res.ok) {
     let body = null;
     try { body = await res.json(); } catch (_) {}
@@ -164,12 +207,13 @@ async function askEngine({ action, args }) {
 }
 
 // Volcado directo de un cambio de celda en Shiftia (sin pasar por IA).
-// Envía la celda parseada (con shift, workerId, fecha) al endpoint de sync.
+// Si el backend no responde (404 o red caída), encola la escritura en
+// chrome.storage.local para reintentarla más tarde desde el panel.
 async function syncCell(cell) {
   const token = await getToken();
   if (!token) return { ok: false, error: 'Inicia sesión antes de volcar cambios' };
   const payload = normalizeCellPayload(cell);
-  let res;
+  let res, networkError = null;
   try {
     res = await fetch(`${SHIFTIA_API_BASE}/api/shifts/sync-cell`, {
       method: 'POST',
@@ -180,8 +224,26 @@ async function syncCell(cell) {
       body: JSON.stringify({ cell: payload, context: lastContext })
     });
   } catch (e) {
-    return { ok: false, error: `Red caída o backend inaccesible: ${e.message}` };
+    networkError = e;
   }
+
+  if (networkError || res?.status === 404) {
+    await enqueuePending(payload);
+    notifyPendingCount();
+    return {
+      ok: true,
+      local: true,
+      data: {
+        queued: true,
+        message: networkError
+          ? `Sin red, cambio encolado localmente: ${payload.workerId} ${payload.dateHuman || ''} → ${payload.targetShift || payload.shift}`
+          : `Backend sin endpoint todavía; cambio encolado: ${payload.workerId} ${payload.dateHuman || ''} → ${payload.targetShift || payload.shift}`,
+        before: payload.shift,
+        after: payload.targetShift || payload.shift
+      }
+    };
+  }
+
   if (res.status === 401) {
     chrome.runtime.sendMessage({ type: 'panel:sessionExpired' }).catch(() => {});
     return { ok: false, error: 'Sesión caducada' };
@@ -194,6 +256,53 @@ async function syncCell(cell) {
   // Invalidar cache porque cambió el estado de la planilla
   cachedData = null; cachedAt = 0;
   return { ok: true, data: await res.json() };
+}
+
+async function getPending() {
+  const { [PENDING_KEY]: arr } = await chrome.storage.local.get(PENDING_KEY);
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function enqueuePending(payload) {
+  const list = await getPending();
+  list.push({ payload, queuedAt: Date.now() });
+  await chrome.storage.local.set({ [PENDING_KEY]: list });
+}
+
+function notifyPendingCount() {
+  getPending().then(list => {
+    chrome.runtime.sendMessage({ type: 'panel:pendingCount', count: list.length }).catch(() => {});
+  });
+}
+
+// Reintenta enviar todos los cambios encolados. Devuelve resumen.
+async function flushPending() {
+  const token = await getToken();
+  if (!token) return { ok: false, error: 'Inicia sesión antes de reintentar' };
+  const list = await getPending();
+  if (list.length === 0) return { ok: true, data: { flushed: 0, remaining: 0 } };
+
+  const remaining = [];
+  let flushed = 0;
+  for (const item of list) {
+    try {
+      const res = await fetch(`${SHIFTIA_API_BASE}/api/shifts/sync-cell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ cell: item.payload, context: lastContext })
+      });
+      if (res.ok) { flushed++; continue; }
+      if (res.status === 401) { remaining.push(item); break; }
+      // 404/500/etc → mantener en cola, volver a intentar luego
+      remaining.push(item);
+    } catch (_) {
+      remaining.push(item);
+    }
+  }
+  await chrome.storage.local.set({ [PENDING_KEY]: remaining });
+  notifyPendingCount();
+  if (flushed > 0) { cachedData = null; cachedAt = 0; }
+  return { ok: true, data: { flushed, remaining: remaining.length } };
 }
 
 // Health-check ligero: comprueba que el backend responde sin auth.

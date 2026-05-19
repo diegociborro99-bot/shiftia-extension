@@ -370,7 +370,10 @@
       result.innerHTML = `<span class="shiftia-ctx-err">${escapeHtml(res?.error || 'Error inesperado')}</span>${hint}`;
       return;
     }
-    result.innerHTML = formatResult(res.data, actionId);
+    const banner = res.local
+      ? '<div class="shiftia-ctx-local">⚙️ motor local — backend offline o sin endpoint</div>'
+      : '';
+    result.innerHTML = banner + formatResult(res.data, actionId);
   }
 
   function formatResult(data, actionId) {

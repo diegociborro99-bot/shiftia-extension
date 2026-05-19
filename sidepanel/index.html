@@ -46,6 +46,16 @@
     </div>
     <div class="sx-health-out" id="sx-health-out" hidden></div>
   </div>
+
+  <div class="sx-pending" id="sx-pending" hidden>
+    <strong>Cambios pendientes de volcar <span class="sx-pending-count" id="sx-pending-count">0</span></strong>
+    <p>El backend no aceptó estos volcados (404 / red caída). Se reintenta sin perder datos.</p>
+    <ul class="sx-pending-list" id="sx-pending-list"></ul>
+    <div class="sx-pending-actions">
+      <button id="sx-pending-flush">Reintentar</button>
+      <button id="sx-pending-clear" class="sx-secondary">Descartar todos</button>
+    </div>
+  </div>
 </section>
 
 <section class="sx-pane" data-pane="import">

@@ -13,6 +13,11 @@ const els = {
   syncBtn: document.getElementById('sx-sync-btn'),
   healthBtn: document.getElementById('sx-health-btn'),
   healthOut: document.getElementById('sx-health-out'),
+  pending: document.getElementById('sx-pending'),
+  pendingCount: document.getElementById('sx-pending-count'),
+  pendingList: document.getElementById('sx-pending-list'),
+  pendingFlush: document.getElementById('sx-pending-flush'),
+  pendingClear: document.getElementById('sx-pending-clear'),
   drop: document.getElementById('sx-drop'),
   filesInput: document.getElementById('sx-files'),
   fileList: document.getElementById('sx-file-list'),
@@ -220,10 +225,46 @@ chrome.runtime.onMessage.addListener((msg) => {
     els.status.classList.add('disconnected');
     els.loginErr.textContent = 'La sesión expiró. Vuelve a entrar.';
   }
+  if (msg?.type === 'panel:pendingCount') refreshPending();
 });
 
 chrome.runtime.sendMessage({ type: 'panel:requestContext' }, (res) => {
   if (res?.payload) renderContext(res.payload);
 });
 
+// ============ Cola de cambios pendientes ============
+async function refreshPending() {
+  const res = await chrome.runtime.sendMessage({ type: 'shiftia:pendingList' });
+  const list = res?.data || [];
+  if (list.length === 0) {
+    els.pending.hidden = true;
+    return;
+  }
+  els.pending.hidden = false;
+  els.pendingCount.textContent = list.length;
+  els.pendingList.innerHTML = list.map(item => {
+    const p = item.payload || {};
+    const when = new Date(item.queuedAt).toLocaleTimeString();
+    const dest = p.targetShift || p.shift || '?';
+    return `<li><b>${escapeHtml(String(p.workerId))}</b> · ${escapeHtml(p.dateHuman || p.dateISO || '?')} → <b>${escapeHtml(dest)}</b> <small>(${when})</small></li>`;
+  }).join('');
+}
+
+els.pendingFlush.addEventListener('click', async () => {
+  els.pendingFlush.disabled = true;
+  els.pendingFlush.textContent = 'reintentando…';
+  const res = await chrome.runtime.sendMessage({ type: 'shiftia:flushPending' });
+  els.pendingFlush.disabled = false;
+  els.pendingFlush.textContent = 'Reintentar';
+  if (!res?.ok) { alert('Error: ' + (res?.error || '?')); return; }
+  refreshPending();
+});
+
+els.pendingClear.addEventListener('click', async () => {
+  if (!confirm('¿Descartar todos los cambios pendientes? No se enviarán a Shiftia.')) return;
+  await chrome.runtime.sendMessage({ type: 'shiftia:clearPending' });
+  refreshPending();
+});
+
 checkAuth();
+refreshPending();
