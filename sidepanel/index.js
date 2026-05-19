@@ -11,6 +11,8 @@ const els = {
   loginBtn: document.getElementById('sx-login-btn'),
   loginErr: document.getElementById('sx-login-err'),
   syncBtn: document.getElementById('sx-sync-btn'),
+  healthBtn: document.getElementById('sx-health-btn'),
+  healthOut: document.getElementById('sx-health-out'),
   drop: document.getElementById('sx-drop'),
   filesInput: document.getElementById('sx-files'),
   fileList: document.getElementById('sx-file-list'),
@@ -73,6 +75,20 @@ els.loginBtn.addEventListener('click', async () => {
 });
 
 els.syncBtn.addEventListener('click', triggerSync);
+
+els.healthBtn.addEventListener('click', async () => {
+  els.healthOut.hidden = false;
+  els.healthOut.className = 'sx-health-out';
+  els.healthOut.textContent = 'comprobando…';
+  const res = await chrome.runtime.sendMessage({ type: 'shiftia:health' });
+  if (res?.ok) {
+    els.healthOut.classList.add('ok');
+    els.healthOut.textContent = `Backend OK (HTTP ${res.status})`;
+  } else {
+    els.healthOut.classList.add('err');
+    els.healthOut.textContent = `Backend KO: ${res?.error || `HTTP ${res?.status || '?'}`}`;
+  }
+});
 
 async function triggerSync() {
   els.sync.textContent = 'sincronizando…';

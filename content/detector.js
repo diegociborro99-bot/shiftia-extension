@@ -150,16 +150,11 @@
   }
 
   function detectWorkerName() {
-    // 1. Cabecera "Bienvenido, APELLIDOS, NOMBRE (SANITARIO - ...)" del shell
-    //    de Actais — funciona en "Mi calendario".
-    const shellHeader = document.querySelector('#welcome-msg, #lblWelcome, .welcome-message');
-    if (shellHeader) {
-      const m = shellHeader.textContent.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+)/);
-      if (m) return m[1].trim();
-    }
+    // ORDEN: primero el calendario del trabajador visualizado (modal/árbol),
+    // y solo como último recurso la cabecera "Bienvenido, …" del shell de
+    // Actais — ésta es el supervisor logueado, no el trabajador examinado.
 
-    // 2. Cabecera del modal "Mi calendario" o "Calendario del empleado"
-    //    (lo más esperado en el visor de gestión cuando la super selecciona un worker).
+    // 1. Cabecera del modal "Calendario del empleado" (visor de gestión).
     const calendarHeader = document.querySelector(
       '#workerCalendarTotalContainer .modal-title, ' +
       '#workerCalendarTotalContainer h3, ' +
@@ -172,7 +167,7 @@
       if (text && !/calendario|empleado|trabajador/i.test(text) && text.length < 80) return text;
     }
 
-    // 3. Item seleccionado en el árbol/lista de empleados (visor de gestión).
+    // 2. Item seleccionado en el árbol/lista de empleados.
     const selectedEmployee = document.querySelector(
       '.dx-treeview-node.dx-state-selected .dx-treeview-item, ' +
       '.tree-employee.selected, ' +
@@ -185,19 +180,29 @@
       if (t && t.length < 80) return t;
     }
 
-    // 4. Selectores genéricos legacy.
+    // 3. Selectores genéricos legacy (rótulo dentro del propio calendario).
     const header = document.querySelector(
       '[id*="lblWorkerName"], [id*="WorkerName"], .worker-name-header, .employee-name'
     );
-    if (header) return header.textContent.trim();
+    if (header) {
+      const t = header.textContent.trim();
+      if (t && t.length < 80) return t;
+    }
 
-    // 5. Title.
+    // 4. Title.
     const tm = document.title.match(/([A-ZÁÉÍÓÚÑ]+,\s*[A-ZÁÉÍÓÚÑ ]+)/);
     if (tm) return tm[1].trim();
 
-    // 6. Último recurso: regex agresivo sobre el body completo.
-    // En Actais el header siempre tiene "Bienvenido, NOMBRE APELLIDO (CATEGORIA - …)"
-    // o "APELLIDOS, NOMBRE" cerca del calendario.
+    // 5. Cabecera "Bienvenido, …" del shell — sólo cuando el propio
+    //    trabajador mira su calendario. Cae aquí porque normalmente es el
+    //    supervisor el que está usando la extensión.
+    const shellHeader = document.querySelector('#welcome-msg, #lblWelcome, .welcome-message');
+    if (shellHeader) {
+      const m = shellHeader.textContent.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+)/);
+      if (m) return m[1].trim();
+    }
+
+    // 6. Último recurso: regex sobre el body.
     const bodyText = (document.body?.innerText || '').slice(0, 4000);
     const welcomeMatch = bodyText.match(/Bienvenido,\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+?)(?=\s*\(|\s*\n)/);
     if (welcomeMatch) return welcomeMatch[1].trim();
@@ -231,15 +236,20 @@
   }
 
   // ====== Menú contextual flotante ======
+  // `targetShift` se inyecta en el payload cuando la acción lo implica
+  // (vacaciones → VAC, librar → L). El backend lo usa para saber el destino.
   const MENU_ACTIONS = [
-    { id: 'librar',           label: '🆓 Librar este día', group: 'ai' },
-    { id: 'whoCovers',        label: '👥 ¿Quién cubre?', group: 'ai' },
-    { id: 'vacaciones',       label: '🏖️ Marcar vacaciones', group: 'ai' },
-    { id: 'cambio',           label: '🔁 Proponer cambio', group: 'ai' },
-    { id: 'validateConvenio', label: '⚖️ Validar convenio', group: 'ai' },
-    { id: 'alternativas',     label: '🧠 Alternativas IA', group: 'ai' },
+    { id: 'librar',           label: '🆓 Librar este día',       group: 'ai',   targetShift: 'L' },
+    { id: 'whoCovers',        label: '👥 ¿Quién cubre?',          group: 'ai' },
+    { id: 'vacaciones',       label: '🏖️ Marcar vacaciones',     group: 'ai',   targetShift: 'VAC' },
+    { id: 'cambio',           label: '🔁 Proponer cambio',        group: 'ai',   promptTarget: true },
+    { id: 'validateConvenio', label: '⚖️ Validar convenio',       group: 'ai' },
+    { id: 'alternativas',     label: '🧠 Alternativas IA',         group: 'ai' },
     { id: 'syncCellChange',   label: '📥 Volcar cambio sin IA a Shiftia', group: 'sync' }
   ];
+
+  // Códigos sugeridos para el prompt rápido de "proponer cambio".
+  const QUICK_TARGETS = ['M', 'T', 'N', 'D', 'L', 'LD', 'VAC', 'BAJ', 'CJ', 'FOR'];
 
   function closeMenu() {
     if (menuEl) { menuEl.remove(); menuEl = null; }
@@ -273,7 +283,7 @@
       const btn = document.createElement('button');
       btn.className = 'shiftia-ctx-btn';
       btn.textContent = act.label;
-      btn.addEventListener('click', () => runAction(act.id, cell));
+      btn.addEventListener('click', () => handleActionClick(act, cell));
       menuEl.appendChild(btn);
     });
 
@@ -287,7 +297,7 @@
       const btn = document.createElement('button');
       btn.className = 'shiftia-ctx-btn shiftia-ctx-btn-sync';
       btn.textContent = act.label;
-      btn.addEventListener('click', () => runAction(act.id, cell));
+      btn.addEventListener('click', () => handleActionClick(act, cell));
       menuEl.appendChild(btn);
     });
 
@@ -311,28 +321,66 @@
     if (rect.bottom > window.innerHeight) menuEl.style.top = `${window.innerHeight - rect.height - 8}px`;
   }
 
-  async function runAction(actionId, cell) {
+  function ensureResultEl() {
     let result = menuEl?.querySelector('.shiftia-ctx-result');
     if (!result) {
       result = document.createElement('div');
       result.className = 'shiftia-ctx-result';
       menuEl?.appendChild(result);
     }
-    result.textContent = 'Consultando…';
+    return result;
+  }
+
+  async function handleActionClick(act, baseCell) {
+    const result = ensureResultEl();
+    let cell = { ...baseCell };
+
+    // Si la acción requiere un destino (cambio), abrir mini-prompt inline.
+    if (act.promptTarget) {
+      result.innerHTML = '<strong>¿A qué turno?</strong><div class="shiftia-ctx-targets"></div>';
+      const targets = result.querySelector('.shiftia-ctx-targets');
+      QUICK_TARGETS.forEach((code) => {
+        const t = document.createElement('button');
+        t.className = 'shiftia-ctx-target';
+        t.textContent = code;
+        t.addEventListener('click', () => {
+          cell.targetShift = code;
+          runAction(act.id, cell);
+        });
+        targets.appendChild(t);
+      });
+      return;
+    }
+
+    if (act.targetShift) cell.targetShift = act.targetShift;
+    runAction(act.id, cell);
+  }
+
+  async function runAction(actionId, cell) {
+    const result = ensureResultEl();
+    result.textContent = actionId === 'syncCellChange' ? 'Volcando…' : 'Consultando…';
     const res = await chrome.runtime.sendMessage({
       type: 'shiftia:askEngine',
       payload: { action: actionId, args: cell }
     }).catch((e) => ({ ok: false, error: e.message }));
     if (!res?.ok) {
-      result.innerHTML = `<span class="shiftia-ctx-err">${escapeHtml(res?.error || 'Error inesperado')}</span>`;
+      const hint = res?.status === 404
+        ? '<br><small>El endpoint todavía no está activo en el backend.</small>'
+        : '';
+      result.innerHTML = `<span class="shiftia-ctx-err">${escapeHtml(res?.error || 'Error inesperado')}</span>${hint}`;
       return;
     }
-    result.innerHTML = formatResult(res.data);
+    result.innerHTML = formatResult(res.data, actionId);
   }
 
-  function formatResult(data) {
+  function formatResult(data, actionId) {
     if (data == null) return '<em>Sin datos</em>';
     if (typeof data === 'string') return escapeHtml(data);
+    if (actionId === 'syncCellChange' || data.synced) {
+      const before = data.before ? `<div><small>antes:</small> <b>${escapeHtml(data.before)}</b></div>` : '';
+      const after = data.after ? `<div><small>después:</small> <b>${escapeHtml(data.after)}</b></div>` : '';
+      return `<strong style="color:#0f7a6d">✓ Cambio volcado en Shiftia</strong>${before}${after}`;
+    }
     if (data.candidates && Array.isArray(data.candidates)) {
       if (data.candidates.length === 0) return '<em>Ningún candidato</em>';
       return '<strong>Top candidatos:</strong><ul>' +
@@ -342,6 +390,9 @@
     if (data.reasons && Array.isArray(data.reasons)) {
       const status = data.legal === false ? '<span class="shiftia-ctx-err">No legal</span>' : '<span style="color:#0f7a6d">Cumple</span>';
       return `${status}<ul>${data.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>`;
+    }
+    if (data.message || data.text) {
+      return `<div>${escapeHtml(data.message || data.text)}</div>`;
     }
     return '<pre>' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
   }

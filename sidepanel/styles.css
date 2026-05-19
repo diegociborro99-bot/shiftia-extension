@@ -219,6 +219,18 @@ body {
   font-family: inherit;
 }
 .sx-help button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sx-help-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sx-health-out {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.sx-health-out.ok { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sx-health-out.err { border-color: #fca5a5; background: rgba(220, 38, 38, 0.06); color: #b91c1c; }
 
 /* ── Footer ─────────────────────────────────────────── */
 .sx-footer {
