@@ -12,7 +12,22 @@ import { rolesAreCompatible, getRole, canCoverShift, isRelocatable, workerNotes 
 const REST_SHIFTS = new Set(['D', 'L', 'LD', 'FN']);
 const ABSENCE_SHIFTS = new Set(['VAC', 'VAN', 'VAA', 'BAJ', 'LAC', 'AE', 'EX', 'PM', 'MTC']);
 const NIGHT_SHIFTS = new Set(['N']);
-const MORNING_SHIFTS = new Set(['M', 'M7H', 'M8', 'M4H', 'M6', 'M55', 'M6R', 'MR']);
+// Turnos productivos completos (los que cuentan como "trabajar").
+const WORK_SHIFTS = new Set([
+  'M', 'M7H', 'M8', 'M4H', 'M6', 'M55', 'M6R', 'MR',
+  'T', 'N', 'INT', 'IQF', 'CJ', 'FOR', 'HS', 'HF', 'G17', 'G24'
+]);
+
+// REGLAS CONFIRMADAS CON LA SUPERVISORA:
+//   1) Tras una noche, sólo se puede trabajar noche o descansar/ausencia.
+//      Nada de mañana ni de tarde tras N.
+//   2) Máximo 3 noches consecutivas (algunos convenios marcan 2; ajustable
+//      desde MAX_CONSECUTIVE_NIGHTS).
+const MAX_CONSECUTIVE_NIGHTS = 3;
+
+function isNonNightWork(shift) {
+  return WORK_SHIFTS.has(shift) && !NIGHT_SHIFTS.has(shift);
+}
 
 function getWorkers(snapshot) {
   return snapshot?.workerMeta || snapshot?.workers || [];
@@ -34,6 +49,32 @@ function getDayShift(snapshot, workerId, year, month1Based, day1Based) {
   const arr = month[workerId] ?? month[String(workerId)];
   if (!Array.isArray(arr)) return null;
   return arr[day1Based - 1] || null;
+}
+
+// Cuenta noches consecutivas terminando en (year, month1, day1) inclusive.
+// Si ese día NO es noche, devuelve 0. Tolerante a faltas de datos al cruzar
+// frontera de mes/año (cuenta hasta lo que haya).
+function countConsecutiveNightsEndingAt(snapshot, workerId, year, month1, day1) {
+  let count = 0;
+  let y = year, m = month1, d = day1;
+  // Normaliza punto de inicio si viene < 1 (p.ej. día 0 = último día del mes anterior).
+  while (d < 1) {
+    m--;
+    if (m < 1) { m = 12; y--; }
+    d += 31; // getDayShift devuelve null si el índice no existe → cortará el bucle
+  }
+  for (let i = 0; i < 12; i++) {
+    const s = getDayShift(snapshot, workerId, y, m, d);
+    if (!NIGHT_SHIFTS.has(s)) break;
+    count++;
+    d--;
+    if (d < 1) {
+      m--;
+      if (m < 1) { m = 12; y--; }
+      d = 31;
+    }
+  }
+  return count;
 }
 
 // Devuelve el turno del día anterior y posterior (cruzando frontera de mes).
@@ -106,7 +147,7 @@ export async function runLocalAction(action, cell, snapshot) {
       const baseRole = getRole(baseWorker);
       const shiftToCover = current; // el sustituto cubre el turno original
       const candidates = [];
-      const filteredOut = { role: 0, constraint: 0, crossPlant: 0 };
+      const filteredOut = { role: 0, constraint: 0, crossPlant: 0, afterNight: 0, tooManyNights: 0 };
 
       for (const w of getWorkers(snapshot)) {
         if (String(w.id) === String(workerId)) continue;
@@ -128,6 +169,25 @@ export async function runLocalAction(action, cell, snapshot) {
         if (isCross && !isRelocatable(w)) { filteredOut.crossPlant++; continue; }
 
         const adj = getAdjacentShifts(snapshot, w.id, year, month1, day1);
+
+        // FILTRO DURO 4: tras una noche, sólo noche o descanso. Si la víspera
+        // fue N y se le pide cubrir algo que no es noche, descartar.
+        if (NIGHT_SHIFTS.has(adj.prev) && isNonNightWork(shiftToCover)) {
+          filteredOut.afterNight++; continue;
+        }
+
+        // FILTRO DURO 5: si la cobertura es nocturna y este trabajador ya
+        // acumula MAX_CONSECUTIVE_NIGHTS noches seguidas hasta el día anterior,
+        // se descarta (cubrir hoy haría la N+1).
+        if (NIGHT_SHIFTS.has(shiftToCover)) {
+          const prevNights = NIGHT_SHIFTS.has(adj.prev)
+            ? countConsecutiveNightsEndingAt(snapshot, w.id, year, month1, day1 - 1)
+            : 0;
+          if (prevNights >= MAX_CONSECUTIVE_NIGHTS) {
+            filteredOut.tooManyNights++; continue;
+          }
+        }
+
         let score = 50;
         const breakdown = [`Descansa (${shift})`, `rol ${getRole(w) || '?'}`];
 
@@ -136,10 +196,6 @@ export async function runLocalAction(action, cell, snapshot) {
           breakdown.push('misma planta');
         } else if (isCross) {
           breakdown.push('otra planta (reubicable)');
-        }
-        if (NIGHT_SHIFTS.has(adj.prev)) {
-          score -= 25;
-          breakdown.push('víspera fue noche');
         }
         if (REST_SHIFTS.has(adj.prev) && REST_SHIFTS.has(adj.next)) {
           score += 10;
@@ -160,6 +216,8 @@ export async function runLocalAction(action, cell, snapshot) {
       if (filteredOut.role) filteredNote.push(`${filteredOut.role} fuera por rol distinto a ${baseRole || '?'}`);
       if (filteredOut.constraint) filteredNote.push(`${filteredOut.constraint} fuera por constraint personal`);
       if (filteredOut.crossPlant) filteredNote.push(`${filteredOut.crossPlant} fuera por no reubicable`);
+      if (filteredOut.afterNight) filteredNote.push(`${filteredOut.afterNight} fuera por venir de noche`);
+      if (filteredOut.tooManyNights) filteredNote.push(`${filteredOut.tooManyNights} fuera por superar ${MAX_CONSECUTIVE_NIGHTS} noches seguidas`);
       return {
         ok: true,
         local: true,
@@ -205,29 +263,37 @@ export async function runLocalAction(action, cell, snapshot) {
       // FILTRO DURO: constraint personal del trabajador (Beatriz solo mañanas).
       const cover = canCoverShift(baseWorker, target);
       if (!cover.ok) {
+        return { ok: true, local: true, data: { legal: false, reasons: [...reasons, cover.reason] } };
+      }
+
+      // REGLA: tras noche, sólo noche o descanso/ausencia.
+      if (NIGHT_SHIFTS.has(prev) && isNonNightWork(target)) {
         return {
           ok: true,
           local: true,
-          data: { legal: false, reasons: [...reasons, cover.reason] }
+          data: { legal: false, reasons: [...reasons, 'Tras una noche solo se puede trabajar otra noche o descansar.'] }
         };
       }
 
-      if (NIGHT_SHIFTS.has(prev) && MORNING_SHIFTS.has(target)) {
-        return {
-          ok: true,
-          local: true,
-          data: {
-            legal: false,
-            reasons: [...reasons, 'Víspera fue noche — no encadenar con mañana sin descanso de 12h.']
-          }
-        };
+      // REGLA: máx MAX_CONSECUTIVE_NIGHTS noches seguidas.
+      if (NIGHT_SHIFTS.has(target)) {
+        const prevNights = NIGHT_SHIFTS.has(prev)
+          ? countConsecutiveNightsEndingAt(snapshot, workerId, year, month1, day1 - 1)
+          : 0;
+        if (prevNights >= MAX_CONSECUTIVE_NIGHTS) {
+          return {
+            ok: true,
+            local: true,
+            data: {
+              legal: false,
+              reasons: [...reasons, `Se superarían ${MAX_CONSECUTIVE_NIGHTS} noches consecutivas (lleva ${prevNights}).`]
+            }
+          };
+        }
       }
+
       if (target === current) {
-        return {
-          ok: true,
-          local: true,
-          data: { legal: false, reasons: [...reasons, 'El turno destino coincide con el actual.'] }
-        };
+        return { ok: true, local: true, data: { legal: false, reasons: [...reasons, 'El turno destino coincide con el actual.'] } };
       }
       reasons.push('Validación convenio completa requiere backend.');
       return { ok: true, local: true, data: { legal: true, reasons } };
@@ -239,23 +305,36 @@ export async function runLocalAction(action, cell, snapshot) {
       const notes = workerNotes(baseWorker);
       if (notes) reasons.push(`Constraint personal: ${notes}`);
 
-      // Si el trabajador tiene restricciones y el turno actual las viola.
+      // Constraint personal del propio trabajador.
       const cover = canCoverShift(baseWorker, current);
       if (!cover.ok) {
+        return { ok: true, local: true, data: { legal: false, reasons: [...reasons, cover.reason] } };
+      }
+
+      // REGLA: tras noche, sólo noche o descanso/ausencia.
+      if (NIGHT_SHIFTS.has(prev) && isNonNightWork(current)) {
         return {
           ok: true,
           local: true,
-          data: { legal: false, reasons: [...reasons, cover.reason] }
+          data: { legal: false, reasons: [...reasons, 'Tras una noche solo se puede trabajar otra noche o descansar.'] }
         };
       }
 
-      if (NIGHT_SHIFTS.has(prev) && MORNING_SHIFTS.has(current)) {
-        return {
-          ok: true,
-          local: true,
-          data: { legal: false, reasons: [...reasons, 'Encadena mañana tras noche sin descanso de 12h.'] }
-        };
+      // REGLA: máx MAX_CONSECUTIVE_NIGHTS noches seguidas (contando el día actual).
+      if (NIGHT_SHIFTS.has(current)) {
+        const consec = countConsecutiveNightsEndingAt(snapshot, workerId, year, month1, day1);
+        if (consec > MAX_CONSECUTIVE_NIGHTS) {
+          return {
+            ok: true,
+            local: true,
+            data: {
+              legal: false,
+              reasons: [...reasons, `Cadena de ${consec} noches consecutivas — máximo permitido ${MAX_CONSECUTIVE_NIGHTS}.`]
+            }
+          };
+        }
       }
+
       reasons.push('Verificación local básica — convenio completo requiere backend.');
       return { ok: true, local: true, data: { legal: true, reasons } };
     }
