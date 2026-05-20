@@ -2,6 +2,18 @@
 // de puntuación — son filtros que excluyen completamente al candidato.
 // Se centralizan aquí para que cuando el backend tenga su propio motor
 // determinista las migremos en bloque a `shiftia/rules.js`.
+//
+// REGLA CONFIRMADA (validada con la supervisora):
+//   - Enfermeros DUE cubren a otros DUE, excepto los que tengan restricciones
+//     personales en WORKER_CONSTRAINTS.
+//   - Técnicos (TCAE/TCE/aux. enfermería) cubren a otros técnicos, igual con
+//     excepciones por restricciones.
+//   - NUNCA un técnico cubre a un DUE ni viceversa.
+//
+// El flujo aplicado en background/engine.js es:
+//   1) rolesAreCompatible(base, candidato)   ← filtro de categoría
+//   2) canCoverShift(candidato, turnoDestino) ← filtro de restricción personal
+//   3) isRelocatable(candidato) si cross-plant ← filtro de planta
 
 // Categorías profesionales. Una TÉCNICO solo cubre TÉCNICO, una ENFERMERA solo
 // cubre ENFERMERA. Sin esta regla un día sin enfermeras se "cubriría" con
@@ -11,11 +23,18 @@ const ROLE_ALIASES = {
   ENFERMERO: ['ENFERMERO', 'ENFERMERA', 'ENFERMERO/A', 'ENFERMERA/O', 'DUE', 'GRADUADO EN ENFERMERIA', 'GRADO ENFERMERIA', 'ENFERMERÍA']
 };
 
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizeRole(category) {
   if (!category) return null;
   const upper = String(category).toUpperCase();
   for (const [role, aliases] of Object.entries(ROLE_ALIASES)) {
-    if (aliases.some(a => upper.includes(a))) return role;
+    // Coincidencia por palabra completa (\b…\b) para que "DUE" no matchee
+    // accidentalmente dentro de "DUEÑA" o "PRODUEÑO" — los alias cortos como
+    // "DUE", "TCE", "TCAE" son los que más riesgo tienen.
+    if (aliases.some(a => new RegExp(`\\b${escapeRegex(a)}\\b`).test(upper))) return role;
   }
   return null; // si no reconocemos la categoría, no asumimos compatibilidad
 }
