@@ -242,14 +242,10 @@
     { id: 'librar',           label: '🆓 Librar este día',       group: 'ai',   targetShift: 'L' },
     { id: 'whoCovers',        label: '👥 ¿Quién cubre?',          group: 'ai' },
     { id: 'vacaciones',       label: '🏖️ Marcar vacaciones',     group: 'ai',   targetShift: 'VAC' },
-    { id: 'cambio',           label: '🔁 Proponer cambio',        group: 'ai',   promptTarget: true },
     { id: 'validateConvenio', label: '⚖️ Validar convenio',       group: 'ai' },
     { id: 'alternativas',     label: '🧠 Alternativas IA',         group: 'ai' },
     { id: 'syncCellChange',   label: '📥 Volcar cambio sin IA a Shiftia', group: 'sync' }
   ];
-
-  // Códigos sugeridos para el prompt rápido de "proponer cambio".
-  const QUICK_TARGETS = ['M', 'T', 'N', 'D', 'L', 'LD', 'VAC', 'BAJ', 'CJ', 'FOR'];
 
   function closeMenu() {
     if (menuEl) { menuEl.remove(); menuEl = null; }
@@ -332,26 +328,7 @@
   }
 
   async function handleActionClick(act, baseCell) {
-    const result = ensureResultEl();
-    let cell = { ...baseCell };
-
-    // Si la acción requiere un destino (cambio), abrir mini-prompt inline.
-    if (act.promptTarget) {
-      result.innerHTML = '<strong>¿A qué turno?</strong><div class="shiftia-ctx-targets"></div>';
-      const targets = result.querySelector('.shiftia-ctx-targets');
-      QUICK_TARGETS.forEach((code) => {
-        const t = document.createElement('button');
-        t.className = 'shiftia-ctx-target';
-        t.textContent = code;
-        t.addEventListener('click', () => {
-          cell.targetShift = code;
-          runAction(act.id, cell);
-        });
-        targets.appendChild(t);
-      });
-      return;
-    }
-
+    const cell = { ...baseCell };
     if (act.targetShift) cell.targetShift = act.targetShift;
     runAction(act.id, cell);
   }

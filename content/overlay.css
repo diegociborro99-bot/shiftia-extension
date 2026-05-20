@@ -166,30 +166,6 @@
 }
 .shiftia-ctx-footer a:hover { text-decoration: underline; }
 
-.shiftia-ctx-targets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-}
-.shiftia-ctx-target {
-  padding: 4px 9px;
-  background: #fff;
-  border: 1px solid #cfd8da;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #0f172a;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-  font-family: inherit;
-}
-.shiftia-ctx-target:hover {
-  background: rgba(15, 122, 109, 0.08);
-  border-color: #0f7a6d;
-  color: #0f7a6d;
-}
-
 .shiftia-ctx-local {
   background: rgba(234, 179, 8, 0.10);
   border: 1px solid rgba(234, 179, 8, 0.30);
