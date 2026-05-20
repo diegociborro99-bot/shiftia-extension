@@ -201,3 +201,13 @@
   letter-spacing: 0.02em;
   margin-bottom: 6px;
 }
+
+.shiftia-ctx-filtered {
+  margin-top: 6px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-style: italic;
+}

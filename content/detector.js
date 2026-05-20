@@ -385,10 +385,13 @@
       return `<strong style="color:#0f7a6d">✓ Cambio volcado en Shiftia</strong>${before}${after}`;
     }
     if (data.candidates && Array.isArray(data.candidates)) {
-      if (data.candidates.length === 0) return '<em>Ningún candidato</em>';
+      const filteredNote = data.filteredOut
+        ? `<div class="shiftia-ctx-filtered">filtros duros: ${escapeHtml(data.filteredOut)}</div>`
+        : '';
+      if (data.candidates.length === 0) return `<em>Ningún candidato compatible</em>${filteredNote}`;
       return '<strong>Top candidatos:</strong><ul>' +
         data.candidates.map(c => `<li><b>${escapeHtml(c.name)}</b> · score ${c.score}${c.crossPlant ? ' · <span style="color:#8b5cf6">cross-plant</span>' : ''}<br><small>${escapeHtml((c.breakdown || []).join(', '))}</small></li>`).join('') +
-        '</ul>';
+        '</ul>' + filteredNote;
     }
     if (data.reasons && Array.isArray(data.reasons)) {
       const status = data.legal === false ? '<span class="shiftia-ctx-err">No legal</span>' : '<span style="color:#0f7a6d">Cumple</span>';

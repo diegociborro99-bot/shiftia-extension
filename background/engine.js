@@ -7,6 +7,8 @@
 //   workers?:    forma legacy alternativa
 //   scheduleData?: { [YYYY-MM]: { [workerId]: [shiftCodes 0-indexed por día] } }
 
+import { rolesAreCompatible, getRole, canCoverShift, isRelocatable, workerNotes } from './rules.js';
+
 const REST_SHIFTS = new Set(['D', 'L', 'LD', 'FN']);
 const ABSENCE_SHIFTS = new Set(['VAC', 'VAN', 'VAA', 'BAJ', 'LAC', 'AE', 'EX', 'PM', 'MTC']);
 const NIGHT_SHIFTS = new Set(['N']);
@@ -101,47 +103,71 @@ export async function runLocalAction(action, cell, snapshot) {
     case 'aiAlternatives': {
       const baseWorker = getWorkerById(snapshot, workerId);
       const basePlant = baseWorker?.plant;
-      const baseCategory = baseWorker?.category;
+      const baseRole = getRole(baseWorker);
+      const shiftToCover = current; // el sustituto cubre el turno original
       const candidates = [];
+      const filteredOut = { role: 0, constraint: 0, crossPlant: 0 };
+
       for (const w of getWorkers(snapshot)) {
         if (String(w.id) === String(workerId)) continue;
         const shift = getDayShift(snapshot, w.id, year, month1, day1);
         if (!REST_SHIFTS.has(shift)) continue;
 
+        // FILTRO DURO 1: categoría profesional. Un TÉCNICO solo cubre TÉCNICO,
+        // una ENFERMERA solo cubre ENFERMERA. Sin esto se mezclarían roles
+        // — error clínico y legal.
+        if (!rolesAreCompatible(baseWorker, w)) { filteredOut.role++; continue; }
+
+        // FILTRO DURO 2: constraint específico (Beatriz solo mañanas, etc.).
+        const cover = canCoverShift(w, shiftToCover);
+        if (!cover.ok) { filteredOut.constraint++; continue; }
+
+        // FILTRO DURO 3: si la cobertura sería cross-plant pero el trabajador
+        // no es reubicable, descartar.
+        const isCross = basePlant && w.plant && w.plant !== basePlant;
+        if (isCross && !isRelocatable(w)) { filteredOut.crossPlant++; continue; }
+
         const adj = getAdjacentShifts(snapshot, w.id, year, month1, day1);
         let score = 50;
-        const breakdown = [`Descansa (${shift})`];
+        const breakdown = [`Descansa (${shift})`, `rol ${getRole(w) || '?'}`];
 
         if (basePlant && w.plant === basePlant) {
           score += 30;
           breakdown.push('misma planta');
-        } else if (basePlant && w.plant && w.plant !== basePlant) {
-          breakdown.push('otra planta');
+        } else if (isCross) {
+          breakdown.push('otra planta (reubicable)');
         }
-        if (baseCategory && w.category === baseCategory) {
-          score += 15;
-          breakdown.push('misma categoría');
-        }
-        // Penaliza si el día anterior trabajó noche (no debería encadenar).
         if (NIGHT_SHIFTS.has(adj.prev)) {
           score -= 25;
           breakdown.push('víspera fue noche');
         }
-        // Bonifica si está descansando antes y después (mejor disponibilidad).
         if (REST_SHIFTS.has(adj.prev) && REST_SHIFTS.has(adj.next)) {
           score += 10;
           breakdown.push('libre 3 días seguidos');
         }
+        const notes = workerNotes(w);
+        if (notes) breakdown.push(notes);
 
         candidates.push({
           name: w.name || `Trabajador ${w.id}`,
           score,
-          crossPlant: basePlant && w.plant && w.plant !== basePlant,
+          crossPlant: isCross,
           breakdown
         });
       }
       candidates.sort((a, b) => b.score - a.score);
-      return { ok: true, local: true, data: { candidates: candidates.slice(0, 5) } };
+      const filteredNote = [];
+      if (filteredOut.role) filteredNote.push(`${filteredOut.role} fuera por rol distinto a ${baseRole || '?'}`);
+      if (filteredOut.constraint) filteredNote.push(`${filteredOut.constraint} fuera por constraint personal`);
+      if (filteredOut.crossPlant) filteredNote.push(`${filteredOut.crossPlant} fuera por no reubicable`);
+      return {
+        ok: true,
+        local: true,
+        data: {
+          candidates: candidates.slice(0, 5),
+          filteredOut: filteredNote.length ? filteredNote.join(' · ') : null
+        }
+      };
     }
 
     case 'vacaciones':
@@ -173,8 +199,19 @@ export async function runLocalAction(action, cell, snapshot) {
     case 'proposeChange': {
       const target = cell.targetShift;
       if (!target) return { ok: false, error: 'Falta turno destino.', local: true };
+      const baseWorker = getWorkerById(snapshot, workerId);
       const reasons = [`${current || '?'} → ${target}`];
-      // Validaciones determinísticas mínimas:
+
+      // FILTRO DURO: constraint personal del trabajador (Beatriz solo mañanas).
+      const cover = canCoverShift(baseWorker, target);
+      if (!cover.ok) {
+        return {
+          ok: true,
+          local: true,
+          data: { legal: false, reasons: [...reasons, cover.reason] }
+        };
+      }
+
       if (NIGHT_SHIFTS.has(prev) && MORNING_SHIFTS.has(target)) {
         return {
           ok: true,
@@ -197,7 +234,21 @@ export async function runLocalAction(action, cell, snapshot) {
     }
 
     case 'validateConvenio': {
+      const baseWorker = getWorkerById(snapshot, workerId);
       const reasons = [`Turno: ${current || '?'}`];
+      const notes = workerNotes(baseWorker);
+      if (notes) reasons.push(`Constraint personal: ${notes}`);
+
+      // Si el trabajador tiene restricciones y el turno actual las viola.
+      const cover = canCoverShift(baseWorker, current);
+      if (!cover.ok) {
+        return {
+          ok: true,
+          local: true,
+          data: { legal: false, reasons: [...reasons, cover.reason] }
+        };
+      }
+
       if (NIGHT_SHIFTS.has(prev) && MORNING_SHIFTS.has(current)) {
         return {
           ok: true,
