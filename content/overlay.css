@@ -187,3 +187,15 @@
   border-radius: 6px;
   font-style: italic;
 }
+
+.shiftia-ctx-warn {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid rgba(220, 38, 38, 0.30);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: #991b1b;
+}
+.shiftia-ctx-warn strong { display: block; margin-bottom: 4px; }
+.shiftia-ctx-warn ul { margin: 4px 0 0 4px; padding-left: 16px; }

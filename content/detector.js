@@ -356,10 +356,21 @@
   function formatResult(data, actionId) {
     if (data == null) return '<em>Sin datos</em>';
     if (typeof data === 'string') return escapeHtml(data);
-    if (actionId === 'syncCellChange' || data.synced) {
+    if (actionId === 'syncCellChange' || data.synced || data.queued || data.noop) {
+      if (data.noop) {
+        return `<strong style="color:#64748b">⊙ Sin cambios</strong><div>${escapeHtml(data.message || '')}</div>`;
+      }
       const before = data.before ? `<div><small>antes:</small> <b>${escapeHtml(data.before)}</b></div>` : '';
       const after = data.after ? `<div><small>después:</small> <b>${escapeHtml(data.after)}</b></div>` : '';
-      return `<strong style="color:#0f7a6d">✓ Cambio volcado en Shiftia</strong>${before}${after}`;
+      const status = data.queued
+        ? `<strong style="color:#92400e">⏳ Cambio en cola local</strong>`
+        : `<strong style="color:#0f7a6d">✓ Cambio volcado en Shiftia</strong>`;
+      let validation = '';
+      if (data.localValidation && data.localValidation.legal === false) {
+        const reasons = (data.localValidation.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+        validation = `<div class="shiftia-ctx-warn"><strong>⚠️ Posible violación de convenio</strong><ul>${reasons}</ul></div>`;
+      }
+      return status + before + after + validation;
     }
     if (data.candidates && Array.isArray(data.candidates)) {
       const filteredNote = data.filteredOut

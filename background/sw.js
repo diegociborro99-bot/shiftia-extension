@@ -206,21 +206,82 @@ async function askEngine({ action, args }) {
   return { ok: true, data: await res.json() };
 }
 
+// Resuelve el nombre del trabajador desde el snapshot cacheado.
+function getCachedWorkerName(workerId) {
+  if (!cachedData) return null;
+  const list = cachedData.workerMeta || cachedData.workers || [];
+  const w = list.find(x => String(x.id) === String(workerId));
+  return w?.name || null;
+}
+
+// Devuelve el turno que Shiftia tiene cacheado para esa celda (o null si
+// no hay datos o la fecha está fuera del snapshot).
+function getCachedDayShift(workerId, year, month1, day1) {
+  if (!cachedData) return null;
+  const key = `${year}-${String(month1).padStart(2, '0')}`;
+  const month = cachedData.scheduleData?.[key];
+  if (!month) return null;
+  const arr = month[workerId] ?? month[String(workerId)];
+  if (!Array.isArray(arr)) return null;
+  return arr[day1 - 1] || null;
+}
+
 // Volcado directo de un cambio de celda en Shiftia (sin pasar por IA).
-// Si el backend no responde (404 o red caída), encola la escritura en
-// chrome.storage.local para reintentarla más tarde desde el panel.
+// Es el flujo "📥 Volcar cambio sin IA": el supervisor cambia un turno en
+// Actais y manda a Shiftia el estado nuevo para que se sincronice.
+//
+// Mejoras sobre la versión naive:
+//  - Resuelve workerName desde el snapshot.
+//  - Compara el turno entrante con el cacheado y aborta si no hay diff
+//    (no-op explícito en lugar de viaje al backend).
+//  - Corre validateConvenio local sobre el nuevo estado y adjunta el
+//    resultado al payload para que el backend pueda auditar y para que
+//    el menú avise si el cambio rompe convenio.
+//  - Dedupe en la cola: el mismo (workerId, dateISO) reemplaza la entrada
+//    anterior en vez de duplicarla.
 async function syncCell(cell) {
   const token = await getToken();
   if (!token) return { ok: false, error: 'Inicia sesión antes de volcar cambios' };
+
+  // Restaurar cache si no estaba en memoria (típico tras reinicio del SW).
+  if (!cachedData) {
+    const restored = await chrome.storage.local.get(['shiftiaData', 'shiftiaDataAt']);
+    if (restored.shiftiaData) {
+      cachedData = restored.shiftiaData;
+      cachedAt = restored.shiftiaDataAt;
+    }
+  }
+
   const payload = normalizeCellPayload(cell);
+  payload.workerName = getCachedWorkerName(payload.workerId);
+  const before = getCachedDayShift(payload.workerId, payload.year, payload.month1Based, payload.day1Based);
+  const after = payload.targetShift || payload.shift;
+  payload.before = before;
+  payload.after = after;
+
+  // NO-OP: si Shiftia ya tiene exactamente este turno, no hace falta volcar.
+  if (before && after && before === after) {
+    return {
+      ok: true,
+      local: true,
+      data: {
+        noop: true,
+        message: `Sin cambios: ${payload.workerName || payload.workerId} ya tiene ${after} el ${payload.dateHuman}.`,
+        before, after
+      }
+    };
+  }
+
+  // Validación local pre-envío. Si rompe convenio, lo señalamos pero NO
+  // bloqueamos — el supervisor puede tener motivos para hacerlo igualmente.
+  const validation = await runLocalAction('validateConvenio', payload, cachedData);
+  if (validation?.ok) payload.localValidation = validation.data;
+
   let res, networkError = null;
   try {
     res = await fetch(`${SHIFTIA_API_BASE}/api/shifts/sync-cell`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ cell: payload, context: lastContext })
     });
   } catch (e) {
@@ -236,10 +297,10 @@ async function syncCell(cell) {
       data: {
         queued: true,
         message: networkError
-          ? `Sin red, cambio encolado localmente: ${payload.workerId} ${payload.dateHuman || ''} → ${payload.targetShift || payload.shift}`
-          : `Backend sin endpoint todavía; cambio encolado: ${payload.workerId} ${payload.dateHuman || ''} → ${payload.targetShift || payload.shift}`,
-        before: payload.shift,
-        after: payload.targetShift || payload.shift
+          ? `Sin red, encolado: ${payload.workerName || payload.workerId} ${payload.dateHuman} → ${after}`
+          : `Backend sin endpoint todavía; encolado: ${payload.workerName || payload.workerId} ${payload.dateHuman} → ${after}`,
+        before, after,
+        localValidation: payload.localValidation
       }
     };
   }
@@ -255,7 +316,11 @@ async function syncCell(cell) {
   }
   // Invalidar cache porque cambió el estado de la planilla
   cachedData = null; cachedAt = 0;
-  return { ok: true, data: await res.json() };
+  const data = await res.json();
+  return {
+    ok: true,
+    data: { ...data, before, after, localValidation: payload.localValidation }
+  };
 }
 
 async function getPending() {
@@ -263,10 +328,18 @@ async function getPending() {
   return Array.isArray(arr) ? arr : [];
 }
 
+// Dedupe por (workerId, dateISO): si ya hay una entrada para esa misma celda,
+// se reemplaza por la nueva. Evita acumular pendientes obsoletos cuando el
+// supervisor cambia varias veces el mismo día antes de que el backend esté.
 async function enqueuePending(payload) {
   const list = await getPending();
-  list.push({ payload, queuedAt: Date.now() });
-  await chrome.storage.local.set({ [PENDING_KEY]: list });
+  const key = `${payload.workerId}_${payload.dateISO || ''}`;
+  const filtered = list.filter(item => {
+    const k = `${item.payload?.workerId}_${item.payload?.dateISO || ''}`;
+    return k !== key;
+  });
+  filtered.push({ payload, queuedAt: Date.now() });
+  await chrome.storage.local.set({ [PENDING_KEY]: filtered });
 }
 
 function notifyPendingCount() {

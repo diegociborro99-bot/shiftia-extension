@@ -112,7 +112,10 @@ export async function runLocalAction(action, cell, snapshot) {
   if (f.error) return { ok: false, error: f.error, local: true };
   const { workerId, year, month1, day1 } = f;
 
-  const current = getDayShift(snapshot, workerId, year, month1, day1) || cell.shift || null;
+  // Precedencia: cell.shift (lo que ve el DOM ahora mismo) gana sobre el
+  // snapshot cacheado, que puede estar stale. Solo se cae al snapshot si la
+  // celda no trae shift (caso teórico — el detector siempre lo extrae).
+  const current = cell.shift || getDayShift(snapshot, workerId, year, month1, day1) || null;
   const { prev, next } = getAdjacentShifts(snapshot, workerId, year, month1, day1);
 
   switch (action) {

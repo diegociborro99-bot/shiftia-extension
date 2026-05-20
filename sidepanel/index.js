@@ -245,8 +245,18 @@ async function refreshPending() {
   els.pendingList.innerHTML = list.map(item => {
     const p = item.payload || {};
     const when = new Date(item.queuedAt).toLocaleTimeString();
-    const dest = p.targetShift || p.shift || '?';
-    return `<li><b>${escapeHtml(String(p.workerId))}</b> · ${escapeHtml(p.dateHuman || p.dateISO || '?')} → <b>${escapeHtml(dest)}</b> <small>(${when})</small></li>`;
+    const after = p.after || p.targetShift || p.shift || '?';
+    const before = p.before;
+    const diff = before
+      ? `<b>${escapeHtml(before)}</b> → <b>${escapeHtml(after)}</b>`
+      : `→ <b>${escapeHtml(after)}</b>`;
+    const who = p.workerName
+      ? `<b>${escapeHtml(p.workerName)}</b>`
+      : `<b>#${escapeHtml(String(p.workerId))}</b>`;
+    const illegal = p.localValidation && p.localValidation.legal === false
+      ? '<span class="sx-pending-illegal" title="Validación local detectó violación de convenio">⚠️</span>'
+      : '';
+    return `<li>${who} · ${escapeHtml(p.dateHuman || p.dateISO || '?')} · ${diff} ${illegal} <small>(${when})</small></li>`;
   }).join('');
 }
 

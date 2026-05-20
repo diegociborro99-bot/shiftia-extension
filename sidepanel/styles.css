@@ -273,6 +273,7 @@ body {
   border-radius: 6px;
 }
 .sx-pending-list small { color: var(--text-3); font-size: 10px; }
+.sx-pending-illegal { color: #dc2626; font-size: 12px; cursor: help; }
 .sx-pending-actions { display: flex; gap: 6px; margin-top: 8px; }
 .sx-pending-actions button {
   padding: 7px 12px;
