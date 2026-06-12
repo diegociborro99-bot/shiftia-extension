@@ -11,8 +11,9 @@
 let session = null;
 let sessionSig = null;     // firma del contexto con el que se creó la sesión
 let els = null;
-let getChatContext = null; // () => ({ ctx, snapshot })
+let getChatContext = null; // () => ({ ctx, snapshot, absences })
 let refreshSnapshot = null; // () => Promise — escanea Actais bajo demanda
+let engineQuery = null;     // (action, day) => Promise — motor determinista
 let busy = false;
 
 function contextSig() {
@@ -49,7 +50,14 @@ function systemPromptNow() {
 }
 
 async function createSession(onProgress) {
+  // Temperatura mínima: queremos extracción fiel del contexto, no creatividad.
+  let sampling = {};
+  try {
+    const params = await LanguageModel.params();
+    if (params) sampling = { temperature: Math.max(0.1, params.minTemperature ?? 0.1), topK: 1 };
+  } catch (_) {}
   return LanguageModel.create({
+    ...sampling,
     initialPrompts: [{ role: 'system', content: systemPromptNow() }],
     monitor(m) {
       if (onProgress) {
@@ -99,13 +107,37 @@ async function handleSend(ev) {
   if (!text || busy) return;
   els.input.value = '';
   appendMessage('user', text);
-  const bubble = appendMessage('ai', '…');
   busy = true;
   setInputEnabled(false);
+  let bubble = null;
   try {
     // Escanear la planilla visible en Actais ANTES de preguntar, para que el
     // modelo siempre responda sobre lo que hay en pantalla.
     if (refreshSnapshot) { try { await refreshSnapshot(); } catch (_) {} }
+
+    // ===== Preguntas críticas → MOTOR DETERMINISTA (verificado), no Nano =====
+    // "¿quién cubre el 26?", "¿puede librar el 14?", "¿es legal el 8?"…
+    const route = window.ShiftiaShared?.routeQuestion?.(text);
+    if (route && engineQuery) {
+      const engineBubble = appendMessage('engine', '');
+      engineBubble.innerHTML = '<div class="sx-engine-tag">⚙️ Motor Shiftia (verificado)</div>Consultando…';
+      const res = await engineQuery(route.action, route.day);
+      const fmt = window.ShiftiaShared?.formatAssistantResult;
+      if (res?.ok && fmt) {
+        engineBubble.innerHTML = '<div class="sx-engine-tag">⚙️ Motor Shiftia (verificado)</div>' + fmt(res.data);
+      } else {
+        engineBubble.innerHTML = '<div class="sx-engine-tag">⚙️ Motor Shiftia</div>' +
+          'No pude consultar el motor: ' + (res?.error || 'error') +
+          '. Asegúrate de tener al trabajador en pantalla y sesión iniciada.';
+      }
+      els.messages.scrollTop = els.messages.scrollHeight;
+      busy = false;
+      setInputEnabled(true);
+      els.input.focus();
+      return;
+    }
+
+    bubble = appendMessage('ai', '…');
     const s = await ensureSession();
     const stream = s.promptStreaming(text);
     bubble.textContent = '';
@@ -115,6 +147,7 @@ async function handleSend(ev) {
     }
     if (!bubble.textContent.trim()) bubble.textContent = '(sin respuesta)';
   } catch (e) {
+    if (!bubble) bubble = appendMessage('ai', '');
     bubble.textContent = 'Error del modelo local: ' + (e?.message || e);
     bubble.classList.add('sx-msg-err');
     // Sesión posiblemente corrupta (p. ej. contexto desbordado): forzar recreación
@@ -146,6 +179,7 @@ async function startDownload() {
 export async function initChat(deps) {
   getChatContext = deps.getChatContext;
   refreshSnapshot = deps.refreshSnapshot || null;
+  engineQuery = deps.engineQuery || null;
   els = {
     status: document.getElementById('sx-chat-status'),
     download: document.getElementById('sx-chat-download'),

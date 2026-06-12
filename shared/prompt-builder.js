@@ -80,9 +80,12 @@
     }
 
     lines.push(
-      'Importante: si no tienes el dato en este contexto, reconoce que no lo sabes y no inventes ' +
-      'turnos, nombres ni fechas. Para validaciones legales definitivas, recomienda usar las ' +
-      'acciones deterministas del menú (Alt+click en un día).'
+      'REGLAS ESTRICTAS: (1) Responde SOLO con datos presentes en este contexto; si no tienes el ' +
+      'dato, di "no tengo ese dato" — no inventes turnos, nombres ni fechas. (2) NUNCA propongas ' +
+      'cambios de turno, sustituciones ni candidatos por tu cuenta: tú no ves las planillas del ' +
+      'resto de la plantilla. Para eso indica que pregunte "¿quién puede cubrir el día X?" (lo ' +
+      'responde el motor verificado) o use Alt+click sobre el día en Actais. (3) Si afirmas algo ' +
+      'sobre la planilla, cita el día concreto del contexto que lo respalda.'
     );
 
     return lines.join('\n\n');

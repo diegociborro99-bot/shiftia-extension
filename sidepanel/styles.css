@@ -506,3 +506,15 @@ body {
   background: var(--accent); color: #fff; border: none; border-radius: 8px;
   font-size: 11.5px; padding: 5px 10px; cursor: pointer;
 }
+
+/* ===== Respuestas del motor en el chat ===== */
+.sx-msg-engine {
+  align-self: stretch; max-width: 100%;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 10px;
+  padding: 9px 11px; font-size: 12.5px;
+}
+.sx-engine-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--accent); margin-bottom: 6px;
+}

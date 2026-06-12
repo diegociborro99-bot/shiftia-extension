@@ -440,6 +440,25 @@ checkAuth();
 // escanea Actais automáticamente antes de cada pregunta.
 initChat({
   getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan, absences: lastAbsences }),
-  refreshSnapshot: fetchScan
+  refreshSnapshot: fetchScan,
+  // Preguntas críticas del chat → motor determinista del backend (verificado)
+  engineQuery: async (action, day) => {
+    if (!lastScan?.workerId && !lastCtx?.worker) {
+      return { ok: false, error: 'no hay trabajador en pantalla (abre su planilla en Actais)' };
+    }
+    const now = new Date();
+    const args = {
+      workerId: lastScan?.workerId || null,
+      workerName: lastScan?.workerName || lastCtx?.worker || null,
+      year: lastScan?.year ?? now.getFullYear(),
+      month: lastScan?.month ?? now.getMonth(),
+      day,
+      shift: lastScan?.cells?.[day] || null
+    };
+    const res = await chrome.runtime.sendMessage({ type: 'shiftia:askEngine', payload: { action, args } })
+      .catch(e => ({ ok: false, error: e.message }));
+    if (res?.ok && res.data?.ok === false) return { ok: false, error: res.data.error || 'error del motor' };
+    return res;
+  }
 });
 refreshAbsences();
