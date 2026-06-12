@@ -31,6 +31,54 @@ const els = {
 let selectedFiles = [];
 let lastCtx = null;       // último contexto broadcast del detector
 let lastScan = null;      // último mes escaneado de Actais {workerId, workerName, year, month, cells, stats}
+let lastAbsences = [];    // ausencias indefinidas vigentes [{name,label,until}]
+
+// ============ Ausencias indefinidas ============
+async function refreshAbsences() {
+  const res = await chrome.runtime.sendMessage({ type: 'panel:getLongAbsences' }).catch(() => null);
+  lastAbsences = res?.absences || [];
+  const list = document.getElementById('sx-abs-list');
+  list.innerHTML = '';
+  for (const a of lastAbsences) {
+    const li = document.createElement('li');
+    li.textContent = `${a.name} — ${a.label}` + (a.until ? ` (hasta ${a.until})` : ' (hasta nuevo aviso)');
+    list.appendChild(li);
+  }
+  updateContextHint();
+}
+
+async function setWorkerStatus(code, label) {
+  const resultEl = document.getElementById('sx-abs-result');
+  const workerName = lastCtx?.worker;
+  if (!workerName) {
+    resultEl.hidden = false;
+    resultEl.innerHTML = '<span class="sx-web-err">No hay trabajador detectado. Selecciónalo en el árbol de Actais.</span>';
+    return;
+  }
+  resultEl.hidden = false;
+  resultEl.textContent = 'Guardando…';
+  const res = await chrome.runtime.sendMessage({
+    type: 'shiftia:askEngine',
+    // Solo workerName (del árbol de Actais): el workerId del último escaneo
+    // podría ser de OTRO trabajador y resolveWorker lo prioriza.
+    payload: { action: 'worker/setStatus', args: { workerName, code, label } }
+  }).catch(e => ({ ok: false, error: e.message }));
+  const data = res?.data || res;
+  if (!res?.ok || data?.ok === false) {
+    resultEl.innerHTML = `<span class="sx-web-err">${escapeHtml(data?.error || res?.error || 'Error')}</span>`;
+    return;
+  }
+  resultEl.innerHTML = `✅ ${escapeHtml(data.message)}`;
+  await chrome.runtime.sendMessage({ type: 'shiftia:syncNow' }).catch(() => {});
+  refreshAbsences();
+}
+
+document.getElementById('sx-abs-set').addEventListener('click', () => {
+  const sel = document.getElementById('sx-abs-code');
+  const opt = sel.options[sel.selectedIndex];
+  setWorkerStatus(sel.value, opt?.dataset?.label || opt?.textContent || sel.value);
+});
+document.getElementById('sx-abs-clear').addEventListener('click', () => setWorkerStatus(null, null));
 
 function renderContext(ctx) {
   lastCtx = ctx || lastCtx;
@@ -127,6 +175,28 @@ function refreshFileList() {
       rm.addEventListener('click', () => { selectedFiles.splice(i, 1); refreshFileList(); });
       li.appendChild(rm);
     }
+    // Item PENDIENTE: el matcher no está seguro → la gestora elige destino
+    if (f.status === 'pending' && Array.isArray(f.candidates)) {
+      const row = document.createElement('div');
+      row.className = 'sx-confirm-row';
+      const sel = document.createElement('select');
+      for (const c of f.candidates) {
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = `${c.name} (${c.score}%)`;
+        sel.appendChild(opt);
+      }
+      const optNew = document.createElement('option');
+      optNew.value = '__new__';
+      optNew.textContent = `➕ Crear "${f.pendingName || f.name}" como trabajador nuevo`;
+      sel.appendChild(optNew);
+      const btn = document.createElement('button');
+      btn.textContent = 'Confirmar';
+      btn.addEventListener('click', () => uploadBatch([f], { [f.name]: sel.value === '__new__' ? '__new__' : Number(sel.value) }));
+      row.appendChild(sel);
+      row.appendChild(btn);
+      li.appendChild(row);
+    }
     els.fileList.appendChild(li);
   });
   els.uploadBtn.disabled = selectedFiles.length === 0 || selectedFiles.some(f => f.status === 'uploading');
@@ -154,33 +224,39 @@ els.drop.addEventListener('drop', e => {
   if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
 });
 
-els.uploadBtn.addEventListener('click', async () => {
-  if (selectedFiles.length === 0) return;
+// Sube un subconjunto de ficheros (todos, o uno solo al confirmar un pending).
+// confirmations: { filename: workerId | '__new__' }
+async function uploadBatch(files, confirmations = {}) {
+  if (files.length === 0) return;
   els.uploadBtn.disabled = true;
   els.importSummary.hidden = true;
 
-  selectedFiles.forEach(f => { f.status = 'uploading'; f.statusLabel = 'subiendo…'; });
+  files.forEach(f => { f.status = 'uploading'; f.statusLabel = 'subiendo…'; });
   refreshFileList();
 
   try {
     // Leer los archivos como ArrayBuffer y mandarlos al SW (que hace FormData)
-    const payload = await Promise.all(selectedFiles.map(async (f) => ({
+    const payload = await Promise.all(files.map(async (f) => ({
       name: f.name,
       data: Array.from(new Uint8Array(await f.file.arrayBuffer()))
     })));
-    const res = await chrome.runtime.sendMessage({ type: 'shiftia:uploadPdfs', payload: { files: payload } });
+    const res = await chrome.runtime.sendMessage({
+      type: 'shiftia:uploadPdfs', payload: { files: payload, confirmations }
+    });
     if (!res?.ok) throw new Error(res?.error || 'Error al subir');
 
     const itemsByName = {};
     (res.data.items || []).forEach(it => { itemsByName[it.filename] = it; });
-    selectedFiles.forEach(f => {
+    files.forEach(f => {
       const it = itemsByName[f.name];
       if (!it) { f.status = 'failed'; f.statusLabel = 'sin respuesta'; return; }
       f.status = it.status;
+      f.candidates = it.status === 'pending' ? (it.candidates || []) : null;
+      f.pendingName = it.status === 'pending' ? it.workerName : null;
       const tag = {
         created: 'creado',
         updated: 'actualizado',
-        pending: `pendiente (${it.confidence}%)`,
+        pending: `pendiente (${it.confidence}%) — elige destino abajo`,
         failed: 'fallo: ' + (it.reason || '?')
       }[it.status] || it.status;
       f.statusLabel = tag;
@@ -200,10 +276,12 @@ els.uploadBtn.addEventListener('click', async () => {
     // Forzar resync para que el sidepanel actualice el contador de trabajadores
     triggerSync();
   } catch (e) {
-    selectedFiles.forEach(f => { if (f.status === 'uploading') { f.status = 'failed'; f.statusLabel = e.message; } });
+    files.forEach(f => { if (f.status === 'uploading') { f.status = 'failed'; f.statusLabel = e.message; } });
     refreshFileList();
   }
-});
+}
+
+els.uploadBtn.addEventListener('click', () => uploadBatch(selectedFiles));
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -361,6 +439,7 @@ checkAuth();
 // Chat con IA local (Gemini Nano) — lee siempre el contexto más fresco y
 // escanea Actais automáticamente antes de cada pregunta.
 initChat({
-  getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan }),
+  getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan, absences: lastAbsences }),
   refreshSnapshot: fetchScan
 });
+refreshAbsences();

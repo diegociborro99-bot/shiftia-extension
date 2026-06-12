@@ -33,4 +33,18 @@ assert.ok(s.includes('5:D'));
 p = buildSystemPrompt(ctx, snap);
 assert.ok(p.length < 4000, `prompt demasiado largo: ${p.length}`);
 
-console.log('prompt-builder: 5/5 OK');
+// 6. Ausencias indefinidas en el contexto del chat
+const absences = [{ name: 'VELARDE GONZALEZ, IRIS', label: 'Baja maternidad', until: null }];
+p = buildSystemPrompt(ctx, snap, absences);
+assert.ok(p.includes('VELARDE GONZALEZ, IRIS'), 'menciona a Iris');
+assert.ok(/baja maternidad/i.test(p));
+assert.ok(/nuevo aviso/i.test(p), 'indefinida = hasta nuevo aviso');
+assert.ok(/no.*propon|descarta|no cuenta/i.test(p), 'instruye a no proponerla');
+// con fecha fin
+p = buildSystemPrompt(ctx, snap, [{ name: 'X GARCIA, ANA', label: 'Excedencia', until: '2026-09-01' }]);
+assert.ok(p.includes('2026-09-01'));
+// vacío → no añade sección
+p = buildSystemPrompt(ctx, snap, []);
+assert.ok(!/ausencias indefinidas/i.test(p));
+
+console.log('prompt-builder: 8/8 OK');

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Shiftia — Consejero, Secretario, Sabio",
-  "version": "0.1.0",
+  "name": "Shiftia V.08 Management SaaS extension",
+  "version": "0.8.0",
   "description": "Asiste a la supervisora dentro de Actais: lee la planilla, sugiere cambios respetando convenio y redacta comunicaciones. Sin coste por uso.",
   "minimum_chrome_version": "114",
   "permissions": [

@@ -39,7 +39,7 @@
     return parts.join(' ');
   }
 
-  function buildSystemPrompt(ctx, monthSnapshot) {
+  function buildSystemPrompt(ctx, monthSnapshot, longAbsences) {
     const lines = [];
     lines.push(
       'Eres Shiftia, asistente de planificación de turnos de enfermería del Hospital de Jove. ' +
@@ -65,6 +65,17 @@
       lines.push(
         'Ahora mismo no hay planilla escaneada cargada. Si la pregunta requiere datos de la planilla, ' +
         'pide a la usuaria que pulse "Escanear mes visible" en el panel.'
+      );
+    }
+
+    if (Array.isArray(longAbsences) && longAbsences.length > 0) {
+      lines.push(
+        'Ausencias indefinidas vigentes (estos trabajadores NO están disponibles — no los propongas ' +
+        'como sustitutos ni cuentes con ellos): ' +
+        longAbsences.map(a =>
+          `${a.name} — ${a.label || a.code || 'ausencia'}` +
+          (a.until ? ` (hasta ${a.until})` : ' (hasta nuevo aviso)')
+        ).join('; ') + '.'
       );
     }
 

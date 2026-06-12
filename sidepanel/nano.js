@@ -16,9 +16,10 @@ let refreshSnapshot = null; // () => Promise — escanea Actais bajo demanda
 let busy = false;
 
 function contextSig() {
-  const { ctx, snapshot } = getChatContext();
+  const { ctx, snapshot, absences } = getChatContext();
   return JSON.stringify([ctx?.worker || null, snapshot?.workerId || null,
-    snapshot?.year ?? null, snapshot?.month ?? null, snapshot?.cells || null]);
+    snapshot?.year ?? null, snapshot?.month ?? null, snapshot?.cells || null,
+    absences || null]);
 }
 
 function setStatus(text, kind = '') {
@@ -41,10 +42,10 @@ function appendMessage(role, text) {
 }
 
 function systemPromptNow() {
-  const { ctx, snapshot } = getChatContext();
+  const { ctx, snapshot, absences } = getChatContext();
   const shared = window.ShiftiaShared;
   if (!shared?.buildSystemPrompt) throw new Error('prompt-builder no cargado');
-  return shared.buildSystemPrompt(ctx, snapshot);
+  return shared.buildSystemPrompt(ctx, snapshot, absences || []);
 }
 
 async function createSession(onProgress) {

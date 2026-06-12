@@ -25,6 +25,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: true, payload: lastContext });
       return true;
 
+    case 'panel:getLongAbsences':
+      getLongAbsences().then(sendResponse).catch(() => sendResponse({ ok: true, absences: [] }));
+      return true;
+
     case 'panel:scrapeMonth':
       scrapeActaisTab().then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;
@@ -70,6 +74,28 @@ async function scrapeActaisTab() {
     }
   }
   return { ok: false, error: 'No se pudo leer Actais: ' + (lastErr?.message || 'sin respuesta (recarga la página)') };
+}
+
+// Ausencias indefinidas vigentes (para el contexto del chat y el panel).
+// Lee de la cache de /api/data; si no hay, intenta refrescarla.
+async function getLongAbsences() {
+  if (!cachedData) {
+    const restored = await chrome.storage.local.get(['shiftiaData', 'shiftiaDataAt']);
+    if (restored.shiftiaData) { cachedData = restored.shiftiaData; cachedAt = restored.shiftiaDataAt; }
+    else await syncShiftiaData(false).catch(() => {});
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const absences = (cachedData?.workerMeta || [])
+    .filter(w => w.longAbsence?.code)
+    .filter(w => !w.longAbsence.until || w.longAbsence.until >= today)
+    .map(w => ({
+      name: w.name,
+      code: w.longAbsence.code,
+      label: w.longAbsence.label || w.longAbsence.code,
+      since: w.longAbsence.since || null,
+      until: w.longAbsence.until || null
+    }));
+  return { ok: true, absences };
 }
 
 async function getToken() {
@@ -134,7 +160,7 @@ async function askEngine({ action, args }) {
 
 // Sube una lista de PDFs serializados (Uint8Array transferidos) al backend
 // como multipart/form-data. El backend hace el parsing y merge.
-async function uploadPdfs({ files }) {
+async function uploadPdfs({ files, confirmations }) {
   const token = await getToken();
   if (!token) return { ok: false, error: 'Inicia sesión antes de importar' };
   if (!Array.isArray(files) || files.length === 0) return { ok: false, error: 'Sin archivos' };
@@ -143,6 +169,10 @@ async function uploadPdfs({ files }) {
   for (const f of files) {
     const blob = new Blob([new Uint8Array(f.data)], { type: 'application/pdf' });
     form.append('files', blob, f.name);
+  }
+  // Confirmaciones de items 'pending': { filename: workerId | '__new__' }
+  if (confirmations && Object.keys(confirmations).length > 0) {
+    form.append('confirmations', JSON.stringify(confirmations));
   }
   const res = await fetch(`${SHIFTIA_API_BASE}/api/import/pdf-upload`, {
     method: 'POST',

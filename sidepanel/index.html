@@ -38,6 +38,23 @@
     <div class="sx-context-row"><span class="sx-k">Sincronización</span><span class="sx-v" id="sx-sync">—</span></div>
   </div>
 
+  <div class="sx-absence-box">
+    <div class="sx-context-title">Ausencia indefinida</div>
+    <p class="sx-import-hint">Marca al trabajador en pantalla como no disponible (baja, excedencia…). El motor dejará de proponerlo como sustituto y el chat lo sabrá.</p>
+    <div class="sx-absence-row">
+      <select id="sx-abs-code">
+        <option value="BAJ" data-label="Baja maternidad">Baja maternidad</option>
+        <option value="BAJ" data-label="Baja (IT)">Baja (IT)</option>
+        <option value="EX" data-label="Excedencia">Excedencia</option>
+        <option value="LAC" data-label="Lactancia">Lactancia</option>
+      </select>
+      <button id="sx-abs-set">Marcar</button>
+      <button id="sx-abs-clear" title="El trabajador vuelve a estar disponible">Quitar</button>
+    </div>
+    <div class="sx-absence-result" id="sx-abs-result" hidden></div>
+    <ul class="sx-absence-list" id="sx-abs-list"></ul>
+  </div>
+
   <div class="sx-help">
     <strong>Uso rápido</strong>
     <p>Abre la planilla del trabajador en Actais y haz <kbd>Alt</kbd>+click sobre cualquier día. Aparecerá el menú flotante con las acciones del asistente: librar, sustitutos, validar convenio, alternativas IA, y volcar cambios sin IA.</p>
@@ -100,7 +117,7 @@
 </section>
 
 <footer class="sx-footer">
-  <div class="sx-version">Shiftia v0.1 · sin coste por consulta</div>
+  <div class="sx-version">Shiftia V.08 Management SaaS · sin coste por consulta</div>
   <div class="sx-attribution">vibecoded by <a href="https://highkeylabs.es" target="_blank" rel="noopener">Highkey Labs</a></div>
 </footer>
 
