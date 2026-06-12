@@ -25,6 +25,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: true, payload: lastContext });
       return true;
 
+    case 'panel:scrapeMonth':
+      scrapeActaisTab().then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+
     case 'shiftia:askEngine':
       askEngine(msg.payload).then(sendResponse).catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;
@@ -45,6 +49,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
   }
 });
+
+// Pide a la pestaña de Actais el scrape del mes visible (content/detector.js).
+async function scrapeActaisTab() {
+  // 1º la pestaña del último contexto; si está cerrada/navegada, fallback a
+  // cualquier pestaña de Actais abierta.
+  const candidates = [];
+  if (lastContext?.tabId) candidates.push(lastContext.tabId);
+  const tabs = await chrome.tabs.query({ url: '*://personal.hospitaldejove.com/*' });
+  for (const t of tabs) if (t.id && !candidates.includes(t.id)) candidates.push(t.id);
+  if (candidates.length === 0) return { ok: false, error: 'No hay ninguna pestaña de Actais abierta' };
+
+  let lastErr = null;
+  for (const tabId of candidates) {
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'actais:scrapeMonth' });
+      if (res) return res;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  return { ok: false, error: 'No se pudo leer Actais: ' + (lastErr?.message || 'sin respuesta (recarga la página)') };
+}
 
 async function getToken() {
   return (await chrome.storage.local.get('shiftiaToken')).shiftiaToken;

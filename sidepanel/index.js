@@ -1,6 +1,16 @@
+import { initChat, updateContextHint } from './nano.js';
+
 const SHIFTIA_API_BASE = 'https://shiftia-production.up.railway.app';
 
 const els = {
+  scanBtn: document.getElementById('sx-scan-btn'),
+  scanInfo: document.getElementById('sx-scan-info'),
+  webPreview: document.getElementById('sx-web-preview'),
+  webDiff: document.getElementById('sx-web-diff'),
+  destructiveRow: document.getElementById('sx-destructive-row'),
+  allowDestructive: document.getElementById('sx-allow-destructive'),
+  applyBtn: document.getElementById('sx-apply-btn'),
+  webResult: document.getElementById('sx-web-result'),
   status: document.getElementById('sx-status'),
   module: document.getElementById('sx-module'),
   worker: document.getElementById('sx-worker'),
@@ -19,8 +29,12 @@ const els = {
 };
 
 let selectedFiles = [];
+let lastCtx = null;       // último contexto broadcast del detector
+let lastScan = null;      // último mes escaneado de Actais {workerId, workerName, year, month, cells, stats}
 
 function renderContext(ctx) {
+  lastCtx = ctx || lastCtx;
+  updateContextHint();
   if (!ctx) {
     els.status.textContent = 'Sin contexto';
     els.status.classList.remove('connected');
@@ -195,6 +209,109 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ============ Importar desde la web (Actais) ============
+function syncMonthPayload(extra = {}) {
+  return {
+    action: 'syncWorkerMonth',
+    args: {
+      workerId: lastScan.workerId,
+      workerName: lastScan.workerName || null,
+      year: lastScan.year,
+      month: lastScan.month,
+      cells: lastScan.cells,
+      ...extra
+    }
+  };
+}
+
+function renderDiff(res) {
+  if (!res.diff || res.diff.length === 0) {
+    els.webDiff.innerHTML = '<em>Sin cambios — el backend ya está sincronizado con lo que ves en Actais.</em>';
+    els.destructiveRow.hidden = true;
+    els.applyBtn.disabled = true;
+    return;
+  }
+  const rows = res.diff.map(d =>
+    `<tr><td>${d.day + 1}</td><td>${escapeHtml(d.from || '—')}</td><td>${escapeHtml(d.to || '—')}</td></tr>`
+  ).join('');
+  const warn = res.destructiveCount > 0
+    ? `<div class="sx-web-warn">⚠️ ${res.destructiveCount} celda(s) se vaciarían. Revisa que Actais haya terminado de cargar antes de volcar.</div>`
+    : '';
+  els.webDiff.innerHTML = `
+    <div class="sx-web-summary">${res.cellsChanged} cambio(s) para <strong>${escapeHtml(res.worker)}</strong></div>
+    ${warn}
+    <table class="sx-diff-table">
+      <thead><tr><th>Día</th><th>Shiftia (actual)</th><th>Actais (nuevo)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  els.destructiveRow.hidden = res.destructiveCount === 0;
+  els.allowDestructive.checked = false;
+  els.applyBtn.disabled = false;
+}
+
+els.scanBtn.addEventListener('click', async () => {
+  els.scanBtn.disabled = true;
+  els.scanInfo.hidden = false;
+  els.scanInfo.textContent = 'Escaneando el calendario de Actais…';
+  els.webPreview.hidden = true;
+  els.webResult.hidden = true;
+  try {
+    const scan = await chrome.runtime.sendMessage({ type: 'panel:scrapeMonth' });
+    if (!scan?.ok) throw new Error(scan?.error || 'No se pudo escanear');
+    lastScan = scan;
+    updateContextHint();
+    els.scanInfo.textContent =
+      `Escaneado: ${scan.workerName || 'worker ' + scan.workerId} · ` +
+      `${String(scan.month + 1).padStart(2, '0')}/${scan.year} · ` +
+      `${scan.stats.filled} turnos en ${scan.stats.daysSeen} días. Comparando con Shiftia…`;
+
+    // Dry-run: diff real contra el backend SIN guardar
+    const preview = await chrome.runtime.sendMessage({
+      type: 'shiftia:askEngine', payload: syncMonthPayload({ dryRun: true })
+    });
+    if (!preview?.ok) throw new Error(preview?.error || 'Error en la vista previa');
+    // El backend puede responder HTTP 200 con ok:false (p. ej. trabajador no
+    // identificado en Shiftia) — no confundirlo con "sin cambios".
+    if (preview.data?.ok === false) throw new Error(preview.data?.error || 'Error en la vista previa');
+    renderDiff(preview.data);
+    els.webPreview.hidden = false;
+    els.scanInfo.textContent = els.scanInfo.textContent.replace(' Comparando con Shiftia…', '');
+  } catch (e) {
+    els.scanInfo.innerHTML = `<span class="sx-web-err">${escapeHtml(e.message)}</span>`;
+  } finally {
+    els.scanBtn.disabled = false;
+  }
+});
+
+els.applyBtn.addEventListener('click', async () => {
+  if (!lastScan) return;
+  els.applyBtn.disabled = true;
+  els.webResult.hidden = false;
+  els.webResult.textContent = 'Volcando a Shiftia…';
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: 'shiftia:askEngine',
+      payload: syncMonthPayload({ allowDestructive: els.allowDestructive.checked })
+    });
+    const data = res?.data || res;
+    if (!res?.ok || data?.ok === false) {
+      if (data?.suspicious) {
+        els.destructiveRow.hidden = false;
+        els.webResult.innerHTML = `<span class="sx-web-err">${escapeHtml(data.message || 'Volcado bloqueado por seguridad')}</span>`;
+        els.applyBtn.disabled = false;
+        return;
+      }
+      throw new Error(data?.error || res?.error || 'Error al volcar');
+    }
+    els.webResult.innerHTML = `✅ ${escapeHtml(data.message)}`;
+    els.webPreview.hidden = true;
+    triggerSync();
+  } catch (e) {
+    els.webResult.innerHTML = `<span class="sx-web-err">${escapeHtml(e.message)}</span>`;
+    els.applyBtn.disabled = false;
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'panel:context') renderContext(msg.payload);
   if (msg?.type === 'panel:sessionExpired') {
@@ -211,3 +328,8 @@ chrome.runtime.sendMessage({ type: 'panel:requestContext' }, (res) => {
 });
 
 checkAuth();
+
+// Chat con IA local (Gemini Nano) — lee siempre el contexto más fresco
+initChat({
+  getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan })
+});

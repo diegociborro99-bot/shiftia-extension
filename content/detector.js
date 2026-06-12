@@ -230,6 +230,34 @@
     chrome.runtime.sendMessage({ type: 'actais:context', payload: ctx }).catch(() => {});
   }
 
+  // ====== Scrape del mes visible ======
+  // Lee TODAS las celdas del calendario abierto (excluyendo .other-month),
+  // las parsea con parseCellElement y delega el ensamblado/validación en
+  // ShiftiaShared.assembleMonth (shared/month-assembler.js, testeado en Node).
+  function scrapeVisibleMonth() {
+    const container = document.querySelector(SELECTOR_CALENDAR_CONTAINER);
+    if (!container) {
+      return { ok: false, error: 'No hay calendario visible en Actais. Abre la planilla de un trabajador.' };
+    }
+    const cellEls = Array.from(container.querySelectorAll(SELECTOR_CALENDAR_CELL))
+      .filter(el => !el.classList.contains('other-month'));
+    const shared = (typeof self !== 'undefined' && self.ShiftiaShared) || null;
+    if (!shared?.assembleMonth) {
+      return { ok: false, error: 'month-assembler no cargado (recarga la extensión)' };
+    }
+    const assembled = shared.assembleMonth(cellEls.map(parseCellElement));
+    if (assembled.ok) assembled.workerName = detectWorkerName();
+    return assembled;
+  }
+
+  // El sidepanel (vía service worker) pide el scrape bajo demanda.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'actais:scrapeMonth') {
+      sendResponse(scrapeVisibleMonth());
+    }
+    return false; // respuesta síncrona
+  });
+
   // ====== Menú contextual flotante ======
   const MENU_ACTIONS = [
     { id: 'librar',           label: '🆓 Librar este día', group: 'ai' },
