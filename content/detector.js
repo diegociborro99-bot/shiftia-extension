@@ -130,6 +130,15 @@
       for (const m of SHIFT_TEXT_MAP) {
         if (m.match.test(scheduleText)) { shift = m.code; break; }
       }
+      // 3er nivel: COLOR de fondo de la celda (paleta confirmada de Actais).
+      // Cubre clases S_X aún no mapeadas y textos no reconocibles.
+      if (!shift) {
+        const colorShared = (typeof self !== 'undefined' && self.ShiftiaShared) || {};
+        if (colorShared.shiftFromColor) {
+          shift = colorShared.shiftFromColor(cellEl.style?.backgroundColor || '');
+          if (shift && !shiftLabel) shiftLabel = shift + ' (por color)';
+        }
+      }
     }
 
     // AUSENCIA: Actais la pinta dentro de la celda como
@@ -383,18 +392,12 @@
   }
 
   function formatResult(data) {
+    // Render visual (veredicto, reglas, candidatos) — shared/result-formatter.js
+    const shared = (typeof self !== 'undefined' && self.ShiftiaShared) || {};
+    if (shared.formatAssistantResult) return shared.formatAssistantResult(data);
+    // Fallback mínimo si el formatter no cargó
     if (data == null) return '<em>Sin datos</em>';
     if (typeof data === 'string') return escapeHtml(data);
-    if (data.candidates && Array.isArray(data.candidates)) {
-      if (data.candidates.length === 0) return '<em>Ningún candidato</em>';
-      return '<strong>Top candidatos:</strong><ul>' +
-        data.candidates.map(c => `<li><b>${escapeHtml(c.name)}</b> · score ${c.score}${c.crossPlant ? ' · <span style="color:#8b5cf6">cross-plant</span>' : ''}<br><small>${escapeHtml((c.breakdown || []).join(', '))}</small></li>`).join('') +
-        '</ul>';
-    }
-    if (data.reasons && Array.isArray(data.reasons)) {
-      const status = data.legal === false ? '<span class="shiftia-ctx-err">No legal</span>' : '<span style="color:#0f7a6d">Cumple</span>';
-      return `${status}<ul>${data.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>`;
-    }
     return '<pre>' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
   }
 

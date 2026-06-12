@@ -165,3 +165,62 @@
   font-weight: 500;
 }
 .shiftia-ctx-footer a:hover { text-decoration: underline; }
+
+/* ===== Resultados visuales del asistente (.sxr-*) ===== */
+.sxr-verdict {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 13px; border-radius: 10px;
+  padding: 8px 12px; margin: 6px 0;
+}
+.sxr-verdict-ok      { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.sxr-verdict-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.sxr-verdict-blocked { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.sxr-verdict-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 12px; flex-shrink: 0;
+  background: currentColor;
+}
+.sxr-verdict-ok .sxr-verdict-icon      { color: #fff; background: #10b981; }
+.sxr-verdict-warning .sxr-verdict-icon { color: #fff; background: #f59e0b; }
+.sxr-verdict-blocked .sxr-verdict-icon { color: #fff; background: #ef4444; }
+.sxr-summary { font-size: 12px; color: #0f172a; margin: 4px 2px 8px; line-height: 1.45; }
+.sxr-muted { color: #64748b; font-size: 11px; }
+.sxr-rules { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+.sxr-rule {
+  display: flex; gap: 7px; align-items: flex-start;
+  font-size: 12px; line-height: 1.4; color: #0f172a;
+  padding: 4px 6px; border-radius: 6px;
+}
+.sxr-rule-icon { font-weight: 700; flex-shrink: 0; width: 14px; text-align: center; }
+.sxr-rule-pass .sxr-rule-icon    { color: #10b981; }
+.sxr-rule-fail .sxr-rule-icon    { color: #ef4444; }
+.sxr-rule-warning .sxr-rule-icon { color: #f59e0b; }
+.sxr-rule-fail { background: #fef2f2; }
+.sxr-candidate {
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 8px 10px; margin: 6px 0; font-size: 12px; color: #334155;
+  background: #f8fafc;
+}
+.sxr-candidate-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #0f7a6d; margin-bottom: 3px;
+}
+.sxr-candidate-row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; font-size: 13px; color: #0f172a; margin-bottom: 2px;
+}
+.sxr-score {
+  background: #0f7a6d; color: #fff; font-weight: 700; font-size: 11px;
+  border-radius: 999px; padding: 2px 8px; flex-shrink: 0;
+}
+.sxr-cross { color: #8b5cf6; font-weight: 600; }
+.sxr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.sxr-chip {
+  background: rgba(15, 122, 109, 0.08); color: #0f7a6d;
+  font-size: 10.5px; border-radius: 999px; padding: 2px 8px;
+}
+.sxr-suggestion { font-size: 12px; color: #334155; margin-top: 6px; font-style: italic; }
+.sxr-draft {
+  white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #0f172a;
+}

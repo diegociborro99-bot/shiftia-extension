@@ -9,12 +9,12 @@ const path = require('path');
 
 function cellHtml(day, opts) {
   // Modelado del markup real: clase S_X en la celda, ausencia en .p3
-  const { sClass, schedule, vac, firstVac, otherMonth } = opts;
+  const { sClass, schedule, vac, firstVac, otherMonth, bg } = opts;
   const dd = String(day).padStart(2, '0');
   const p3 = vac
     ? `<div class="p3 has-absence"><div id="absence_${dd}-06-2026_91933" class="slot ProgInc absence abs-long absence_91933 middle-slot ${firstVac ? 'first-slot ' : ''}Inc_91933 VAC">${firstVac ? '<span class="fa fa-sun-o"></span><span style="margin-left: 3px">VAC</span>' : ''}</div></div>`
     : '<div class="p3"></div>';
-  return `<div id="1122_${dd}-06-2026" class="month-calendar-cell cssClass ${otherMonth ? 'other-month ' : ''}with-contract ${sClass} Status_10" data-item="${day}" idprogrammedcalendar="43055${day}">
+  return `<div id="1122_${dd}-06-2026" class="month-calendar-cell cssClass ${otherMonth ? 'other-month ' : ''}with-contract ${sClass} Status_10" data-item="${day}" idprogrammedcalendar="43055${day}" style="background-color: ${bg || 'rgb(32, 121, 121)'};">
     <div class="p1"><div class="schedule">${schedule}</div><div class="day"><span>${day}</span></div><div class="planification" style="display:none">Cuadrante</div></div>
     <div class="p2"><div class="punches-container"></div><div class="info-complete" hidden></div></div>${p3}</div>`;
 }
@@ -23,6 +23,11 @@ let cells = '';
 for (let d = 1; d <= 30; d++) {
   const isVac = d >= 3 && d <= 10;
   const isRest = [1, 2, 6, 7, 13, 14, 20, 21, 27, 28].includes(d);
+  if (d === 30) {
+    // Clase S_99 DESCONOCIDA con texto irreconocible → debe resolver por COLOR (amarillo = N)
+    cells += cellHtml(d, { sClass: 'S_99', schedule: 'Turno especial', bg: 'rgb(255, 217, 64)' });
+    continue;
+  }
   cells += cellHtml(d, {
     sClass: isRest ? 'S_10' : (d === 26 ? 'S_30' : 'S_1'),
     schedule: isRest ? 'Descanso' : (d === 26 ? 'Tardes 15:00 - 22:00' : 'Mañanas 08:00 - 15:00'),
@@ -52,7 +57,9 @@ global.self = dom.window;
 // ShiftiaShared en el "mundo" del content script
 dom.window.ShiftiaShared = Object.assign({},
   require('../shared/month-assembler'),
-  require('../shared/absence-overlay'));
+  require('../shared/absence-overlay'),
+  require('../shared/shift-colors'),
+  require('../shared/result-formatter'));
 
 // Stub de chrome
 let scrapeListener = null;
@@ -82,6 +89,7 @@ for (let d = 3; d <= 10; d++) assert.strictEqual(result.cells[d - 1], 'VAC', `d�
 assert.strictEqual(result.cells[0], 'D');
 assert.strictEqual(result.cells[11], 'M', 'día 12 trabaja');
 assert.strictEqual(result.cells[25], 'T', 'día 26 tarde');
+assert.strictEqual(result.cells[29], 'N', 'día 30: S_99 desconocida resuelta por COLOR amarillo');
 assert.strictEqual(result.cells[30], '', 'día 31 no existe en junio');
 assert.strictEqual(result.stats.absenceDays, 8);
 assert.strictEqual(result.stats.daysSeen, 30, 'la celda de julio (other-month) no cuenta');

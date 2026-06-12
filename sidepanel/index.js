@@ -269,10 +269,11 @@ els.scanBtn.addEventListener('click', async () => {
   try {
     const scan = await fetchScan();
     if (!scan?.ok) throw new Error(scan?.error || 'No se pudo escanear');
-    els.scanInfo.textContent =
+    const scanLabel =
       `Escaneado: ${scan.workerName || 'worker ' + scan.workerId} · ` +
       `${String(scan.month + 1).padStart(2, '0')}/${scan.year} · ` +
-      `${scan.stats.filled} turnos en ${scan.stats.daysSeen} días. Comparando con Shiftia…`;
+      `${scan.stats.filled} turnos en ${scan.stats.daysSeen} días.`;
+    els.scanInfo.textContent = scanLabel + ' Comparando con Shiftia…';
 
     // Dry-run: diff real contra el backend SIN guardar
     const preview = await chrome.runtime.sendMessage({
@@ -282,9 +283,23 @@ els.scanBtn.addEventListener('click', async () => {
     // El backend puede responder HTTP 200 con ok:false (p. ej. trabajador no
     // identificado en Shiftia) — no confundirlo con "sin cambios".
     if (preview.data?.ok === false) throw new Error(preview.data?.error || 'Error en la vista previa');
-    renderDiff(preview.data);
-    els.webPreview.hidden = false;
-    els.scanInfo.textContent = els.scanInfo.textContent.replace(' Comparando con Shiftia…', '');
+    els.scanInfo.textContent = scanLabel;
+    const d = preview.data;
+
+    // ===== Flujo inteligente de 1 clic =====
+    // Sin cambios → informar. Cambios seguros (nada se vacía) → volcar directo.
+    // Cambios destructivos → vista previa con confirmación explícita.
+    if (d.cellsChanged === 0 && !d.willCreate) {
+      els.webResult.hidden = false;
+      els.webResult.innerHTML = '✅ Ya sincronizado — Shiftia coincide con lo que ves en Actais.';
+    } else if (d.destructiveCount === 0) {
+      els.webResult.hidden = false;
+      els.webResult.textContent = (d.willCreate ? 'Creando trabajador y volcando…' : 'Volcando ' + d.cellsChanged + ' cambio(s)…');
+      await applySync();
+    } else {
+      renderDiff(d);
+      els.webPreview.hidden = false;
+    }
   } catch (e) {
     els.scanInfo.innerHTML = `<span class="sx-web-err">${escapeHtml(e.message)}</span>`;
   } finally {
@@ -292,11 +307,10 @@ els.scanBtn.addEventListener('click', async () => {
   }
 });
 
-els.applyBtn.addEventListener('click', async () => {
+async function applySync() {
   if (!lastScan) return;
   els.applyBtn.disabled = true;
   els.webResult.hidden = false;
-  els.webResult.textContent = 'Volcando a Shiftia…';
   try {
     const res = await chrome.runtime.sendMessage({
       type: 'shiftia:askEngine',
@@ -319,6 +333,12 @@ els.applyBtn.addEventListener('click', async () => {
     els.webResult.innerHTML = `<span class="sx-web-err">${escapeHtml(e.message)}</span>`;
     els.applyBtn.disabled = false;
   }
+}
+
+els.applyBtn.addEventListener('click', () => {
+  els.webResult.hidden = false;
+  els.webResult.textContent = 'Volcando a Shiftia…';
+  applySync();
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
