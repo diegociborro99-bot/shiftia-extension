@@ -10,7 +10,8 @@
   const SHIFT_CODE_MAP = {
     'S_1':  { code: 'M',   label: 'Mañana', reduced: false },
     'S_10': { code: 'D',   label: 'Descanso' },
-    'S_30': { code: 'T',   label: 'Tarde' }
+    'S_30': { code: 'T',   label: 'Tarde' },
+    'S_34': { code: 'N',   label: 'Noche' } // confirmado con HTML real 12-jun-2026
     // Hipótesis pendientes de confirmar con HTML real:
     // 'S_X': { code: 'N',   label: 'Noche' },
     // 'S_X': { code: 'M7H', label: 'Mañana 7H', reduced: true },
@@ -87,6 +88,21 @@
   let lastContextSig = null;
   let menuEl = null;
 
+  // ====== Trabajador seleccionado según el ESTADO INTERNO de Actais ======
+  // page-bridge.js (mundo de la página) lee jQuery(tree).tree('getSelected')
+  // y lo publica por postMessage. Es la fuente de verdad: id real (w_46) +
+  // nombre oficial. Las heurísticas de DOM quedan solo como fallback.
+  let bridgeWorker = null; // { id: '46', name: 'APELLIDOS, NOMBRE' } | null
+
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window) return;
+    const d = ev.data;
+    if (d?.source !== 'shiftia-bridge' || d.type !== 'selectedWorker') return;
+    const shared = (typeof self !== 'undefined' && self.ShiftiaShared) || {};
+    bridgeWorker = shared.normalizeBridgeWorker ? shared.normalizeBridgeWorker(d.payload) : null;
+    broadcastContext();
+  });
+
   // ====== Parser de celda ======
   function parseCellElement(cellEl) {
     const idAttr = cellEl.id || '';
@@ -116,23 +132,20 @@
       }
     }
 
-    // OVERLAY DE INCIDENCIA: Actais pinta una barra azul ARRIBA del turno
-    // cuando hay VAC, BAJ, LAC, FOR, etc. La barra normalmente es un span/div
-    // con el código. Si encontramos algo así, lo prioriza sobre el turno base.
-    const overlayText = (
-      cellEl.querySelector('.info-complete')?.textContent ||
-      cellEl.querySelector('[class*="incidencia"]')?.textContent ||
-      cellEl.querySelector('[class*="absence"]')?.textContent ||
-      ''
-    ).trim().toUpperCase();
-    const upperCellText = (cellEl.textContent || '').toUpperCase();
-    const OVERLAY_CODES = ['VAC', 'VAN', 'VAA', 'BAJ', 'LAC', 'FOR', 'CJ', 'CAA', 'DLA', 'HS', 'AE', 'EX', 'PM', 'MTC', 'IT'];
-    for (const code of OVERLAY_CODES) {
-      const re = new RegExp('\\b' + code + '\\b');
-      if (re.test(overlayText) || re.test(upperCellText)) {
+    // AUSENCIA: Actais la pinta dentro de la celda como
+    // <div class="slot ProgInc absence … Inc_NNNNN VAC"> en .p3.
+    // El código viene como CLASE (los días de continuación no llevan texto).
+    // Verificado con HTML real del 12-jun-2026. Pisa el turno base.
+    const slotEl = cellEl.querySelector('.p3 .absence, .p3 .slot, .absence.slot');
+    const shared = (typeof self !== 'undefined' && self.ShiftiaShared) || {};
+    if (slotEl && shared.absenceCodeFromCell) {
+      const code = shared.absenceCodeFromCell({
+        classes: Array.from(slotEl.classList),
+        text: slotEl.textContent || ''
+      });
+      if (code) {
         shift = code;
-        shiftLabel = (VALID_SHIFTS[code]?.label || code) + ' (overlay sobre ' + (shiftLabel || '?') + ')';
-        break;
+        shiftLabel = (VALID_SHIFTS[code]?.label || code) + ' (sobre ' + (shiftLabel || '?') + ')';
       }
     }
 
@@ -150,61 +163,57 @@
   }
 
   function detectWorkerName() {
-    // 1. Cabecera "Bienvenido, APELLIDOS, NOMBRE (SANITARIO - ...)" del shell
-    //    de Actais — funciona en "Mi calendario".
-    const shellHeader = document.querySelector('#welcome-msg, #lblWelcome, .welcome-message');
-    if (shellHeader) {
-      const m = shellHeader.textContent.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+)/);
-      if (m) return m[1].trim();
-    }
+    // 0. Fuente de verdad: estado interno del árbol de Actais (vía bridge).
+    if (bridgeWorker?.name) return bridgeWorker.name;
+    return detectWorkerNameFromDom();
+  }
 
-    // 2. Cabecera del modal "Mi calendario" o "Calendario del empleado"
-    //    (lo más esperado en el visor de gestión cuando la super selecciona un worker).
-    const calendarHeader = document.querySelector(
+  function detectWorkerNameFromDom() {
+    // Fallback heurístico. La validación de formato "APELLIDOS, NOMBRE" vive
+    // en ShiftiaShared.pickWorkerName (testeada): descarta basura tipo
+    // "SANITARIO HEMATOLOGIA DUE …" del árbol.
+    const candidates = [];
+    const push = (el) => { if (el) candidates.push(el.textContent || ''); };
+
+    // 1. Nodo SELECCIONADO en el árbol de empleados (visor de gestión).
+    //    Actais usa easyui-tree: el nodo activo lleva .tree-node-selected y el
+    //    nombre va en su .tree-title (verificado con HTML real 12-jun-2026).
+    document.querySelectorAll(
+      '.tree-node-selected .tree-title, ' +
+      '.tree-node-selected, ' +
+      '.jstree-clicked, ' +
+      '[aria-selected="true"], ' +
+      '.dx-treeview-node.dx-state-selected .dx-treeview-item, ' +
+      'li.ui-state-active, .ui-state-active'
+    ).forEach(push);
+
+    // 2. Cabecera del modal "Calendario del empleado".
+    document.querySelectorAll(
       '#workerCalendarTotalContainer .modal-title, ' +
       '#workerCalendarTotalContainer h3, ' +
       '#workerCalendarTotalContainer h4, ' +
-      '#workerCalendarTotalContainer [class*="header"], ' +
       '.modal-header .modal-title'
-    );
-    if (calendarHeader) {
-      const text = calendarHeader.textContent.trim();
-      if (text && !/calendario|empleado|trabajador/i.test(text) && text.length < 80) return text;
-    }
+    ).forEach(push);
 
-    // 3. Item seleccionado en el árbol/lista de empleados (visor de gestión).
-    const selectedEmployee = document.querySelector(
-      '.dx-treeview-node.dx-state-selected .dx-treeview-item, ' +
-      '.tree-employee.selected, ' +
-      '[class*="employee"][class*="selected"], ' +
-      'li.selected[id*="emp"], ' +
-      'li.ui-state-active'
-    );
-    if (selectedEmployee) {
-      const t = selectedEmployee.textContent.trim();
-      if (t && t.length < 80) return t;
-    }
-
-    // 4. Selectores genéricos legacy.
-    const header = document.querySelector(
+    // 3. Selectores legacy de nombre.
+    document.querySelectorAll(
       '[id*="lblWorkerName"], [id*="WorkerName"], .worker-name-header, .employee-name'
-    );
-    if (header) return header.textContent.trim();
+    ).forEach(push);
 
-    // 5. Title.
-    const tm = document.title.match(/([A-ZÁÉÍÓÚÑ]+,\s*[A-ZÁÉÍÓÚÑ ]+)/);
-    if (tm) return tm[1].trim();
+    // 4. Cabecera "Bienvenido, …" (en "Mi calendario" el worker es la propia
+    //    usuaria). Va al final: en el visor de gestión sería la supervisora,
+    //    no el trabajador seleccionado.
+    const shellHeader = document.querySelector('#welcome-msg, #lblWelcome, .welcome-message');
+    if (shellHeader) {
+      const m = shellHeader.textContent.match(/Bienvenido,?\s*(.+?)(?:\s*\(|$)/);
+      if (m) candidates.push(m[1]);
+    }
 
-    // 6. Último recurso: regex agresivo sobre el body completo.
-    // En Actais el header siempre tiene "Bienvenido, NOMBRE APELLIDO (CATEGORIA - …)"
-    // o "APELLIDOS, NOMBRE" cerca del calendario.
-    const bodyText = (document.body?.innerText || '').slice(0, 4000);
-    const welcomeMatch = bodyText.match(/Bienvenido,\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+,\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+?)(?=\s*\(|\s*\n)/);
-    if (welcomeMatch) return welcomeMatch[1].trim();
-    const generalMatch = bodyText.match(/\b([A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){1,4},\s*[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,})?)\b/);
-    if (generalMatch) return generalMatch[1].trim();
+    // 5. Título de la pestaña.
+    candidates.push(document.title || '');
 
-    return null;
+    const shared = (typeof self !== 'undefined' && self.ShiftiaShared) || {};
+    return shared.pickWorkerName ? shared.pickWorkerName(candidates) : null;
   }
 
   function detectModule() {
@@ -232,7 +241,8 @@
 
   // ====== Scrape del mes visible ======
   // Lee TODAS las celdas del calendario abierto (excluyendo .other-month),
-  // las parsea con parseCellElement y delega el ensamblado/validación en
+  // las parsea con parseCellElement (que ya resuelve turnos S_X y ausencias
+  // VAC/BAJ/… por la clase del .slot.absence) y delega el ensamblado en
   // ShiftiaShared.assembleMonth (shared/month-assembler.js, testeado en Node).
   function scrapeVisibleMonth() {
     const container = document.querySelector(SELECTOR_CALENDAR_CONTAINER);
@@ -246,7 +256,21 @@
       return { ok: false, error: 'month-assembler no cargado (recarga la extensión)' };
     }
     const assembled = shared.assembleMonth(cellEls.map(parseCellElement));
-    if (assembled.ok) assembled.workerName = detectWorkerName();
+    if (!assembled.ok) return assembled;
+
+    const absenceSet = new Set(shared.ABSENCE_CODES || []);
+    assembled.stats.absenceDays = assembled.cells.filter(c => absenceSet.has(c)).length;
+
+    // Nombre: solo se usa el del bridge si su id CASA con el de las celdas
+    // escaneadas (garantiza que nombre y planilla son del mismo trabajador).
+    // Si el árbol apunta a otra persona (calendario aún sin recargar), se cae
+    // al fallback de DOM, y en última instancia el backend resuelve por
+    // actaisId vinculado.
+    if (bridgeWorker?.name && (!bridgeWorker.id || String(bridgeWorker.id) === String(assembled.workerId))) {
+      assembled.workerName = bridgeWorker.name;
+    } else {
+      assembled.workerName = detectWorkerNameFromDom();
+    }
     return assembled;
   }
 

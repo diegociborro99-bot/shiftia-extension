@@ -32,7 +32,7 @@
   "content_scripts": [
     {
       "matches": ["*://personal.hospitaldejove.com/*"],
-      "js": ["shared/month-assembler.js", "content/detector.js"],
+      "js": ["shared/month-assembler.js", "shared/absence-overlay.js", "content/detector.js"],
       "css": ["content/overlay.css"],
       "run_at": "document_idle",
       "all_frames": false

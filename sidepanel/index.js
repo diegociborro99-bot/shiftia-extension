@@ -210,6 +210,17 @@ function escapeHtml(s) {
 }
 
 // ============ Importar desde la web (Actais) ============
+// Escanea el mes visible en Actais y actualiza el contexto compartido
+// (lo usan el botón de importación Y el chat antes de cada pregunta).
+async function fetchScan() {
+  const scan = await chrome.runtime.sendMessage({ type: 'panel:scrapeMonth' }).catch(() => null);
+  if (scan?.ok) {
+    lastScan = scan;
+    updateContextHint();
+  }
+  return scan;
+}
+
 function syncMonthPayload(extra = {}) {
   return {
     action: 'syncWorkerMonth',
@@ -256,10 +267,8 @@ els.scanBtn.addEventListener('click', async () => {
   els.webPreview.hidden = true;
   els.webResult.hidden = true;
   try {
-    const scan = await chrome.runtime.sendMessage({ type: 'panel:scrapeMonth' });
+    const scan = await fetchScan();
     if (!scan?.ok) throw new Error(scan?.error || 'No se pudo escanear');
-    lastScan = scan;
-    updateContextHint();
     els.scanInfo.textContent =
       `Escaneado: ${scan.workerName || 'worker ' + scan.workerId} · ` +
       `${String(scan.month + 1).padStart(2, '0')}/${scan.year} · ` +
@@ -329,7 +338,9 @@ chrome.runtime.sendMessage({ type: 'panel:requestContext' }, (res) => {
 
 checkAuth();
 
-// Chat con IA local (Gemini Nano) — lee siempre el contexto más fresco
+// Chat con IA local (Gemini Nano) — lee siempre el contexto más fresco y
+// escanea Actais automáticamente antes de cada pregunta.
 initChat({
-  getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan })
+  getChatContext: () => ({ ctx: lastCtx, snapshot: lastScan }),
+  refreshSnapshot: fetchScan
 });

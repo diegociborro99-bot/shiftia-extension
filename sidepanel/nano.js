@@ -9,9 +9,17 @@
 // ============================================================================
 
 let session = null;
+let sessionSig = null;     // firma del contexto con el que se creó la sesión
 let els = null;
 let getChatContext = null; // () => ({ ctx, snapshot })
+let refreshSnapshot = null; // () => Promise — escanea Actais bajo demanda
 let busy = false;
+
+function contextSig() {
+  const { ctx, snapshot } = getChatContext();
+  return JSON.stringify([ctx?.worker || null, snapshot?.workerId || null,
+    snapshot?.year ?? null, snapshot?.month ?? null, snapshot?.cells || null]);
+}
 
 function setStatus(text, kind = '') {
   els.status.textContent = text;
@@ -51,7 +59,17 @@ async function createSession(onProgress) {
 }
 
 async function ensureSession() {
-  if (!session) session = await createSession();
+  // Si la planilla/trabajador en pantalla cambió desde que se creó la sesión,
+  // se recrea para que el modelo vea el contexto fresco.
+  const sig = contextSig();
+  if (session && sig !== sessionSig) {
+    try { session.destroy(); } catch (_) {}
+    session = null;
+  }
+  if (!session) {
+    session = await createSession();
+    sessionSig = sig;
+  }
   return session;
 }
 
@@ -84,6 +102,9 @@ async function handleSend(ev) {
   busy = true;
   setInputEnabled(false);
   try {
+    // Escanear la planilla visible en Actais ANTES de preguntar, para que el
+    // modelo siempre responda sobre lo que hay en pantalla.
+    if (refreshSnapshot) { try { await refreshSnapshot(); } catch (_) {} }
     const s = await ensureSession();
     const stream = s.promptStreaming(text);
     bubble.textContent = '';
@@ -123,6 +144,7 @@ async function startDownload() {
 
 export async function initChat(deps) {
   getChatContext = deps.getChatContext;
+  refreshSnapshot = deps.refreshSnapshot || null;
   els = {
     status: document.getElementById('sx-chat-status'),
     download: document.getElementById('sx-chat-download'),
