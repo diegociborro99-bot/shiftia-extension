@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shiftia · Asistente</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="sx-header">
+  <div class="sx-logo-group">
+    <div class="sx-logo-mark">S</div>
+    <div class="sx-logo">Shiftia</div>
+  </div>
+  <div class="sx-status" id="sx-status">Esperando…</div>
+</header>
+
+<section class="sx-auth" id="sx-auth" hidden>
+  <p>Inicia sesión con tu cuenta de Shiftia para cargar las planillas y empezar a usar el asistente.</p>
+  <input id="sx-email" type="email" placeholder="Correo electrónico" autocomplete="username" />
+  <input id="sx-pass" type="password" placeholder="Contraseña" autocomplete="current-password" />
+  <button id="sx-login-btn">Entrar</button>
+  <small id="sx-login-err"></small>
+</section>
+
+<nav class="sx-tabs" role="tablist">
+  <button class="sx-tab active" data-tab="assistant" role="tab">Asistente</button>
+  <button class="sx-tab" data-tab="chat" role="tab">Chat</button>
+  <button class="sx-tab" data-tab="import" role="tab">Importar</button>
+</nav>
+
+<section class="sx-pane active" data-pane="assistant">
+  <div class="sx-context">
+    <div class="sx-context-title">Contexto detectado</div>
+    <div class="sx-context-row"><span class="sx-k">Trabajador</span><span class="sx-v" id="sx-worker">—</span></div>
+    <div class="sx-context-row"><span class="sx-k">Módulo Actais</span><span class="sx-v" id="sx-module">—</span></div>
+    <div class="sx-context-row"><span class="sx-k">Sincronización</span><span class="sx-v" id="sx-sync">—</span></div>
+  </div>
+
+  <div class="sx-absence-box">
+    <div class="sx-context-title">Ausencia indefinida</div>
+    <p class="sx-import-hint">Marca al trabajador en pantalla como no disponible (baja, excedencia…). El motor dejará de proponerlo como sustituto y el chat lo sabrá.</p>
+    <div class="sx-absence-row">
+      <select id="sx-abs-code">
+        <option value="BAJ" data-label="Baja maternidad">Baja maternidad</option>
+        <option value="BAJ" data-label="Baja (IT)">Baja (IT)</option>
+        <option value="EX" data-label="Excedencia">Excedencia</option>
+        <option value="LAC" data-label="Lactancia">Lactancia</option>
+      </select>
+      <button id="sx-abs-set">Marcar</button>
+      <button id="sx-abs-clear" title="El trabajador vuelve a estar disponible">Quitar</button>
+    </div>
+    <div class="sx-absence-result" id="sx-abs-result" hidden></div>
+    <ul class="sx-absence-list" id="sx-abs-list"></ul>
+  </div>
+
+  <div class="sx-help">
+    <strong>Uso rápido</strong>
+    <p>Abre la planilla del trabajador en Actais y haz <kbd>Alt</kbd>+click sobre cualquier día. Aparecerá el menú flotante con las acciones del asistente: librar, sustitutos, validar convenio, alternativas IA, y volcar cambios sin IA.</p>
+    <button id="sx-sync-btn">↻ Sincronizar ahora</button>
+  </div>
+</section>
+
+<section class="sx-pane" data-pane="chat">
+  <div class="sx-chat">
+    <div class="sx-chat-status" id="sx-chat-status">Comprobando IA local…</div>
+    <div class="sx-chat-download" id="sx-chat-download" hidden>
+      <p>El modelo local (Gemini Nano) aún no está descargado. Se descarga una sola vez y todo queda en este equipo — ningún dato sale del hospital.</p>
+      <button id="sx-chat-dl-btn" class="sx-primary">Descargar modelo</button>
+      <div class="sx-chat-dl-progress" id="sx-chat-dl-progress" hidden><div id="sx-chat-dl-bar"></div></div>
+    </div>
+    <div class="sx-chat-messages" id="sx-chat-messages" aria-live="polite"></div>
+    <form class="sx-chat-form" id="sx-chat-form">
+      <textarea id="sx-chat-input" rows="2" placeholder="Pregunta sobre la planilla… p. ej. ¿cuántas noches tiene este mes?" disabled></textarea>
+      <button type="submit" id="sx-chat-send" class="sx-primary" disabled>Enviar</button>
+    </form>
+    <div class="sx-chat-hint">
+      <span id="sx-chat-ctx">Contexto: sin planilla escaneada</span>
+      <button type="button" id="sx-chat-reset" title="Reinicia la conversación con el contexto actual">↻ Reiniciar con contexto actual</button>
+    </div>
+  </div>
+</section>
+
+<section class="sx-pane" data-pane="import">
+  <div class="sx-import sx-import-web">
+    <div class="sx-context-title">Importar desde la web (Actais)</div>
+    <p class="sx-import-hint">Abre la planilla del trabajador en Actais y pulsa importar: lee el mes en pantalla (turnos, colores y ausencias) y actualiza la planilla interna de ese trabajador. Si el trabajador no existe en Shiftia, se crea solo. Solo pide confirmación si algún dato se perdería.</p>
+    <button id="sx-scan-btn" class="sx-primary">📥 Importar mes visible</button>
+    <div class="sx-scan-info" id="sx-scan-info" hidden></div>
+    <div class="sx-web-preview" id="sx-web-preview" hidden>
+      <div class="sx-context-title">Vista previa del volcado</div>
+      <div class="sx-web-diff" id="sx-web-diff"></div>
+      <label class="sx-destructive-row" id="sx-destructive-row" hidden>
+        <input type="checkbox" id="sx-allow-destructive"> Permitir vaciar celdas que hoy tienen valor
+      </label>
+      <button id="sx-apply-btn" class="sx-primary" disabled>Volcar a Shiftia</button>
+    </div>
+    <div class="sx-web-result" id="sx-web-result" hidden></div>
+  </div>
+
+  <div class="sx-import">
+    <div class="sx-context-title">Importar planificación anual</div>
+    <p class="sx-import-hint">Selecciona o arrastra los PDFs anuales por empleado de Actais. Solo se necesita hacer una vez por trabajador (la data queda guardada en el backend de Shiftia).</p>
+    <label class="sx-drop" id="sx-drop">
+      <input type="file" id="sx-files" multiple accept=".pdf,application/pdf" hidden>
+      <div class="sx-drop-inner">
+        <div class="sx-drop-icon">📄</div>
+        <div class="sx-drop-text">Arrastra PDFs aquí o haz clic para seleccionar</div>
+        <div class="sx-drop-sub">Hasta 200 archivos · 5 MB cada uno</div>
+      </div>
+    </label>
+    <button id="sx-upload-btn" class="sx-primary" disabled>Subir 0 PDFs</button>
+    <ul class="sx-file-list" id="sx-file-list"></ul>
+    <div class="sx-import-summary" id="sx-import-summary" hidden></div>
+  </div>
+</section>
+
+<footer class="sx-footer">
+  <div class="sx-version">Shiftia V.08 Management SaaS · sin coste por consulta</div>
+  <div class="sx-attribution">vibecoded by <a href="https://highkeylabs.es" target="_blank" rel="noopener">Highkey Labs</a></div>
+</footer>
+
+<script src="../shared/prompt-builder.js"></script>
+<script src="../shared/chat-router.js"></script>
+<script src="../shared/result-formatter.js"></script>
+<script type="module" src="index.js"></script>
+</body>
+</html>
