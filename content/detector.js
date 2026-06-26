@@ -319,7 +319,8 @@
 
     const header = document.createElement('div');
     header.className = 'shiftia-ctx-header';
-    header.textContent = `Worker ${cell.workerId || '?'} · ${dateStr} · ${cell.shift || cell.shiftLabel || '—'}`;
+    const who = cell.workerName || (cell.workerId ? `Worker ${cell.workerId}` : 'Worker ?');
+    header.textContent = `${who} · ${dateStr} · ${cell.shift || cell.shiftLabel || '—'}`;
     menuEl.appendChild(header);
 
     if (cell.planification) {
@@ -425,7 +426,13 @@
       ev.preventDefault();
       ev.stopPropagation();
       const cell = parseCellElement(cellEl);
-      cell.worker = detectWorkerName();
+      // El workerId parseado de la celda (ej. "1122") es el id de trabajador de
+      // Actais (mismo que el del árbol "w_1122") → es válido, se conserva.
+      // El nombre se envía bajo `workerName`, la MISMA clave que usan el resto de
+      // llamadas a askEngine (syncWorkerMonth, worker/setStatus, chat); antes iba
+      // como `worker` y el backend podía ignorarlo al resolver por nombre.
+      cell.workerName = detectWorkerName();
+      cell.worker = cell.workerName; // compat hacia atrás
       openMenu(ev.pageX, ev.pageY, cell);
     }, true);
 

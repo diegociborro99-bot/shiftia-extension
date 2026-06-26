@@ -29,7 +29,7 @@ icons/                     ← Placeholders (16/48/128 px)
 
 ## Backend esperado
 
-La extensión llama a `https://shiftia-director-production.up.railway.app/api/assistant/<action>`. Acciones previstas en MVP:
+La extensión llama a `https://shiftia-production.up.railway.app/api/assistant/<action>`. Acciones previstas en MVP:
 
 | Acción | Cara | Qué hace |
 |---|---|---|
