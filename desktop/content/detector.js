@@ -373,6 +373,42 @@
     if (rect.bottom > window.innerHeight) menuEl.style.top = `${window.innerHeight - rect.height - 8}px`;
   }
 
+  // El backend avisa "No hay planilla. Sube el PDF primero." cuando no tiene la
+  // planilla del trabajador/mes guardada. Detectamos ese caso para auto-volcar.
+  function looksLikeNoPlanilla(msg) {
+    return /no hay planilla|sube el pdf|sin planilla|no planilla/i.test(String(msg || ''));
+  }
+
+  // Extrae el mensaje de error tanto si viene como HTTP error (res.error) como
+  // si viene en un 200 con { ok:false, error/message } dentro de res.data.
+  function errorOf(res) {
+    if (!res) return 'sin respuesta';
+    if (res.ok === false) return res.error || 'error';
+    if (res.data?.ok === false) return res.data.error || res.data.message || 'error';
+    return null;
+  }
+
+  // Escanea el mes visible en Actais y lo vuelca al backend (syncWorkerMonth,
+  // NO destructivo: el guard de vaciado del backend sigue protegiendo). Sirve
+  // para que las acciones del asistente tengan la planilla si aún no estaba.
+  async function syncVisibleMonth() {
+    const scan = scrapeVisibleMonth();
+    if (!scan.ok) return { ok: false, error: scan.error };
+    const res = await chrome.runtime.sendMessage({
+      type: 'shiftia:askEngine',
+      payload: { action: 'syncWorkerMonth', args: {
+        workerId: scan.workerId,
+        workerName: scan.workerName || null,
+        year: scan.year,
+        month: scan.month,
+        cells: scan.cells
+      } }
+    }).catch((e) => ({ ok: false, error: e.message }));
+    const err = errorOf(res);
+    if (err) return { ok: false, error: err, suspicious: res?.data?.suspicious };
+    return { ok: true, data: res.data };
+  }
+
   async function runAction(actionId, cell) {
     let result = menuEl?.querySelector('.shiftia-ctx-result');
     if (!result) {
@@ -381,12 +417,28 @@
       menuEl?.appendChild(result);
     }
     result.textContent = 'Consultando…';
-    const res = await chrome.runtime.sendMessage({
+    const ask = () => chrome.runtime.sendMessage({
       type: 'shiftia:askEngine',
       payload: { action: actionId, args: cell }
     }).catch((e) => ({ ok: false, error: e.message }));
-    if (!res?.ok) {
-      result.innerHTML = `<span class="shiftia-ctx-err">${escapeHtml(res?.error || 'Error inesperado')}</span>`;
+
+    let res = await ask();
+    // Auto-volcado: si el backend no tiene la planilla, la volcamos desde lo que
+    // se ve en Actais y reintentamos la acción una vez.
+    if (looksLikeNoPlanilla(errorOf(res))) {
+      result.textContent = 'No había planilla en Shiftia — volcando el mes visible y reintentando…';
+      const sync = await syncVisibleMonth();
+      if (!sync.ok) {
+        const hint = sync.suspicious ? ' (el volcado se bloqueó por seguridad: espera a que Actais cargue del todo y usa Importar → Escanear mes visible)' : '';
+        result.innerHTML = `<span class="shiftia-ctx-err">No pude volcar la planilla automáticamente: ${escapeHtml(sync.error)}${hint}</span>`;
+        return;
+      }
+      res = await ask();
+    }
+
+    const err = errorOf(res);
+    if (err) {
+      result.innerHTML = `<span class="shiftia-ctx-err">${escapeHtml(err)}</span>`;
       return;
     }
     result.innerHTML = formatResult(res.data);

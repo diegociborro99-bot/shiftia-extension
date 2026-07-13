@@ -287,6 +287,12 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// El backend responde "No hay planilla. Sube el PDF primero." cuando no tiene la
+// planilla del trabajador/mes guardada → dispara el auto-volcado.
+function looksLikeNoPlanilla(msg) {
+  return /no hay planilla|sube el pdf|sin planilla|no planilla/i.test(String(msg || ''));
+}
+
 // ============ Importar desde la web (Actais) ============
 // Escanea el mes visible en Actais y actualiza el contexto compartido
 // (lo usan el botón de importación Y el chat antes de cada pregunta).
@@ -455,9 +461,22 @@ initChat({
       day,
       shift: lastScan?.cells?.[day] || null
     };
-    const res = await chrome.runtime.sendMessage({ type: 'shiftia:askEngine', payload: { action, args } })
-      .catch(e => ({ ok: false, error: e.message }));
-    if (res?.ok && res.data?.ok === false) return { ok: false, error: res.data.error || 'error del motor' };
+    const runOnce = async () => {
+      const res = await chrome.runtime.sendMessage({ type: 'shiftia:askEngine', payload: { action, args } })
+        .catch(e => ({ ok: false, error: e.message }));
+      if (res?.ok && res.data?.ok === false) return { ok: false, error: res.data.error || 'error del motor' };
+      return res;
+    };
+    let res = await runOnce();
+    // Auto-volcado: si el backend no tiene la planilla, la volcamos desde el mes
+    // ya escaneado (no destructivo: el guard de vaciado del backend protege) y
+    // reintentamos la consulta una vez.
+    if (!res?.ok && looksLikeNoPlanilla(res.error) && lastScan?.cells) {
+      const dump = await chrome.runtime.sendMessage({ type: 'shiftia:askEngine', payload: syncMonthPayload() })
+        .catch(() => null);
+      const dumpErr = !dump?.ok ? (dump?.error || 'error') : (dump.data?.ok === false ? (dump.data.error || dump.data.message) : null);
+      if (!dumpErr) res = await runOnce();
+    }
     return res;
   }
 });
